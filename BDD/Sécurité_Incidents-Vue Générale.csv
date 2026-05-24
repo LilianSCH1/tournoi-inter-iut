@@ -1,0 +1,6 @@
+﻿Type urgence,Gravité,Lieu,Description,Personne concernée,Contact signalant,Statut,Pris en charge par,Actions prises,Notes internes,Mot d'urgence utilisé
+Médicale,🟡 Modérée,Terrain 1,Entorse cheville suite à réception,Lucas Mercier - Nancy Alpha,0612345678,Résolu,Lucas Dubois (Sécurité),"Application glace, bandage, repos recommandé",Peut reprendre demain,Non
+Logistique,🟢 Faible,Vestiaire 2,Problème douche eau froide,,0698765432,Résolu,Axel Perrin (Technique),Chaudière redémarrée,,Non
+Sécurité,🔴 Grave,Gymnase Jules Ferry,Comportement inapproprié d'un participant,Anonyme,Anonyme,En traitement,Lilian SCHMITT,Entretien avec la personne concernée - avertissement donné,Surveillance renforcée,Oui
+Médicale,🆘 Critique,Terrain 2,Malaise cardiaque,Pierre Durand - Metz Warriors,0645678901,Résolu,Lucas Dubois,"SAMU appelé, défibrillateur utilisé, évacuation hôpital",Pronostic favorable - récupération complète,Non
+Logistique,🟢 Faible,Cafétéria,Manque de couverts pour le repas,,0656789012,Résolu,Alyssia Martinez,Couverts supplémentaires fournis,,Non

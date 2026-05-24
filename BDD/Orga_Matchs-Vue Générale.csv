@@ -1,0 +1,39 @@
+﻿ID Match,Sport,Phase,Date,Heure debut,Terrain,Equipe A,Equipe B,Score A,Score B,Statut,Notes
+M001,Basket,Poules,2027-01-14,09:00,Terrain 1,,,,,Programme,
+M002,Volley,Poules,2027-01-14,09:00,Terrain 2,,,,,Programme,
+M003,Basket,Poules,2027-01-14,09:40,Terrain 1,,,,,Programme,
+M004,Volley,Poules,2027-01-14,09:40,Terrain 2,,,,,Programme,
+M005,Futsal,Poules,2027-01-14,10:20,Terrain 1,,,,,Programme,
+M006,Handball,Poules,2027-01-14,10:20,Terrain 2,,,,,Programme,
+M007,Basket,Poules,2027-01-14,11:00,Terrain 1,,,,,Programme,
+M008,Volley,Poules,2027-01-14,11:00,Terrain 2,,,,,Programme,
+M009,Futsal,Poules,2027-01-14,11:40,Terrain 1,,,,,Programme,
+M010,Handball,Poules,2027-01-14,11:40,Terrain 2,,,,,Programme,
+M011,Basket,Poules,2027-01-14,13:30,Terrain 1,,,,,Programme,
+M012,Volley,Poules,2027-01-14,13:30,Terrain 2,,,,,Programme,
+M013,Futsal,Poules,2027-01-14,14:10,Terrain 1,,,,,Programme,
+M014,Handball,Poules,2027-01-14,14:10,Terrain 2,Nancy-Brabois 1,Nancy-Brabois 2,,,Programme,
+M015,Basket,Poules,2027-01-14,14:50,Terrain 1,,,,,Programme,
+M016,Volley,Poules,2027-01-14,14:50,Terrain 2,,,,,Programme,
+M017,Futsal,Poules,2027-01-14,15:30,Terrain 1,,,,,Programme,
+M018,Handball,Poules,2027-01-14,15:30,Terrain 2,,,,,Programme,
+M019,Basket,Poules,2027-01-14,16:10,Terrain 1,,,,,Programme,
+M020,Volley,Poules,2027-01-14,16:10,Terrain 2,,,,,Programme,
+M021,Basket,Demi-finale,2027-01-15,09:00,Terrain 1,,,,,Programme,Demi 1 Basket
+M022,Volley,Demi-finale,2027-01-15,09:00,Terrain 2,,,,,Programme,Demi 1 Volley
+M023,Basket,Demi-finale,2027-01-15,09:40,Terrain 1,,,,,Programme,Demi 2 Basket
+M024,Volley,Demi-finale,2027-01-15,09:40,Terrain 2,,,,,Programme,Demi 2 Volley
+M025,Futsal,Demi-finale,2027-01-15,10:20,Terrain 1,,,,,Programme,Demi 1 Futsal
+M026,Handball,Demi-finale,2027-01-15,10:20,Terrain 2,,,,,Programme,Demi 1 Handball
+M027,Futsal,Demi-finale,2027-01-15,11:00,Terrain 1,,,,,Programme,Demi 2 Futsal
+M028,Handball,Demi-finale,2027-01-15,11:00,Terrain 2,,,,,Programme,Demi 2 Handball
+M029,Basket,Petite finale,2027-01-15,13:00,Terrain 1,,,,,Programme,3e place
+M030,Volley,Petite finale,2027-01-15,13:00,Terrain 2,Nancy-Brabois 1,Nancy-Brabois 2,,,Programme,3e place
+M031,Futsal,Petite finale,2027-01-15,13:40,Terrain 1,,,,,Programme,3e place
+M032,Handball,Petite finale,2027-01-15,13:40,Terrain 2,,,,,Programme,3e place
+M033,Basket,Finale,2027-01-15,14:30,Terrain 1,,,,,Programme,FINALE
+M034,Volley,Finale,2027-01-15,15:10,Terrain 1,,,,,Programme,FINALE
+M035,Futsal,Finale,2027-01-15,15:50,Terrain 1,,,,,Programme,FINALE
+M036,Handball,Finale,2027-01-15,16:30,Terrain 1,,,,,Programme,FINALE + Ceremonie
+Test Match 1,Basket,Poules,2026-03-09,09:00,Terrain Test 1,Equipe Test 1A,Equipe Test 1B,12,10,Programme,Match test automatique
+Test Match 2,Volley,Demi-finale,2026-03-09,11:00,Terrain Test 2,Equipe Test 2A,Equipe Test 2B,18,20,Programme,Match test automatique

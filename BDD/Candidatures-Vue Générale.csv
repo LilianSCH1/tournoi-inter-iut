@@ -1,0 +1,5 @@
+﻿Type candidature,Statut,Nom équipe,IUT,Sport,Capitaine nom,Capitaine email,Capitaine téléphone,Liste joueurs,Nombre joueurs,Spectateur nom,Spectateur email,Spectateur téléphone,Spectateur IUT,Transport souhaité,Hébergement souhaité,Allergies,Commentaires,Validé par,Motif refus
+Équipe,En attente,Les Tigres de Nancy,IUT Nancy-Charlemagne,Basket,Jean Dupont,jean.dupont@etu.univ-lorraine.fr,612345678,"[{""nom"":""Jean Dupont"",""poste"":""Meneur""},{""nom"":""Marie Martin"",""poste"":""Ailier""}]",10,,,,,,Oui,Oui,,,
+Spectateur,En attente,,,,,,,,Sophie Bernard,sophie.bernard@gmail.com,698765432,IUT Metz,Non,Non,,Je viens encourager mon frère,,,
+Équipe,Acceptée,Warriors de Metz,IUT Metz,Volley,Pierre Durand,p.durand@etu.univ-lorraine.fr,645678901,"[{""nom"":""Pierre Durand"",""poste"":""Passeur""}]",8,,,,,,Oui,Oui,,,Manon Delorme
+Spectateur,Refusée,,,,,,,,Paul Petit,paul.petit@outlook.fr,656789012,IUT Longwy,Non,Non,,,Lucas Dubois,Plus de places disponibles,
