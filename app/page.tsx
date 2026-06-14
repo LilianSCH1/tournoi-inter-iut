@@ -74,7 +74,7 @@ export default function HomePage() {
             </div>
             <p className="hidden md:flex items-center gap-2 text-sm text-slate-600">
               <MapPin className="w-4 h-4 text-slate-500" />
-              POJC Saint-Die-des-Vosges • 14-15 janvier
+              POJC Saint-Dié-des-Vosges • 14-15 janvier
             </p>
           </div>
         </div>
