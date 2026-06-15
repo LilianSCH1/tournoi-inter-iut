@@ -1,10 +1,26 @@
-﻿Nom complet,IUT,Équipe,Type,Email,Téléphone,Allergies alimentaires,Taille maillot,Licence sportive,Licence validée,Transport,Hébergement,Arrivée confirmée,Départ confirmé,Date inscription,Statut validation,Document licence,Document certificat médical,Document autorisation,Documents à valider,Commentaire validation,Numéro urgence
-SCHMITT Lilian,IUT Saint-Dié-des-Vosges,,Bénévole,lilian.schmitt1@etu.univ-lorraine.fr,07 69 22 68 87,Aucune,XL,,,Sur place,Non,,,,,,,,,,
-GUESMI Delya,IUT Saint-Dié-des-Vosges,,Bénévole,,,,,,,Sur place,Non,,,,,,,,,,
-FREY Alyssia,IUT Saint-Dié-des-Vosges,,Bénévole,,,,,,,Sur place,Non,,,,,,,,,,
-CESAR Lucas,IUT Saint-Dié-des-Vosges,,Bénévole,,,,,,,Sur place,Non,,,,,,,,,,
-GOUILLEUX Axel,IUT Saint-Dié-des-Vosges,,Bénévole,,,,,,,Sur place,Non,,,,,,,,,,
-BERNE Manon,IUT Saint-Dié-des-Vosges,,Bénévole,,,,,,,Sur place,Non,,,,,,,,,,
-CHAUFFET Julian,IUT Saint-Dié-des-Vosges,,Bénévole,,,,,,,Sur place,Non,,,,,,,,,,
-Test Participant 1,IUT Metz,Joueur,test1@example.com,,0600000001,Aucune,L,123456,Oui,Navette,Oui,Oui,Non,,,,,,,,
-Test Participant 2,IUT Nancy-Charlemagne,Spectateur,test2@example.com,,0600000002,Végétarien,M,654321,Non,Propre moyen,Non,Non,Oui,,,,,,,,
+﻿Nom complet,IUT,Équipe,Type,Email,Téléphone,Allergies alimentaires,Taille maillot,Licence sportive,Licence validée,Transport,Hébergement,Arrivée confirmée,Départ confirmé,Date inscription,Statut validation,Document licence,Document certificat médical,Document autorisation,Documents à valider,Commentaire validation,Numéro urgence,Devis_Pièces_Jointes,ToDo_List
+SCHMITT Lilian,IUT Saint-Dié-des-Vosges,,Bénévole,lilian.schmitt1@etu.univ-lorraine.fr,07 69 22 68 87,Aucune,XL,,,Sur place,Non,,,,,,,,,,,,"Valider menu BBQ vendredi soir,Devis trophées"
+GUESMI Delya,IUT Saint-Dié-des-Vosges,,Bénévole,,,,,,,Sur place,Non,,,,,,,,,,,,Imprimer affiches 7 IUT
+FREY Alyssia,IUT Saint-Dié-des-Vosges,,Bénévole,,,,,,,Sur place,Non,,,,,,,,,,,,
+CESAR Lucas,IUT Saint-Dié-des-Vosges,,Bénévole,,,,,,,Sur place,Non,,,,,,,,,,,,
+GOUILLEUX Axel,IUT Saint-Dié-des-Vosges,,Bénévole,,,,,,,Sur place,Non,,,,,,,,,,,,Devis Repas
+BERNE Manon,IUT Saint-Dié-des-Vosges,,Bénévole,manon.berne5@etu.univ-lorraine.fr,,,,,,Sur place,Non,,,,,,,,,,,Croix-Rouge ,"Finaliser planning matchs 4 sports,Tester talkie-walkies"
+CHAUFFET Julian,IUT Saint-Dié-des-Vosges,,Bénévole,,,,,,,Sur place,Non,,,,,,,,,,,,
+Test Participant 1,IUT Metz,,Joueur,,0600000001,Aucune,L,123456,Oui,Navette,Oui,Oui,Non,,,,,,,,,,
+Test Participant 2,IUT Nancy-Charlemagne,,Joueur,,0600000002,Végétarien,M,654321,Non,Propre moyen,Non,Oui,Oui,,,,,,,,,,
+Damien RINALDIS,IUT Saint-Dié-des-Vosges,PinkieBlinders,Joueur,damien.rinaldis4@etu.univ-lorraine.f,0769226887,,,,,,Non,,,,,,,,,,,,Devis Sécurité
+Spectateur 1,IUT Saint-Dié-des-Vosges,,Joueur,,,,,,,,,,,,,,,,,,,,
+Spectateur 2,IUT Metz,,Joueur,,,,,,,,,Oui,,,,,,,,,,,
+Spectateur 3,IUT Nancy-Brabois,,Joueur,,,,,,,,,,,,,,,,,,,,
+Spectateur 4,IUT Thionville-Yutz,,Joueur,,,,,,,,,,,,,,,,,,,,
+Spectateur 5,IUT Longwy,,Joueur,,,,,,,,,,,,,,,,,,,,
+Spectateur 6,IUT Moselle-Est,,Joueur,,,,,,,,,,,,,,,,,,,,
+Spectateur 7,IUT Metz,,Joueur,,,,,,,,,,,,,,,,,,,,
+Spectateur 8,IUT Nancy-Brabois,,Joueur,,,,,,,,,,,,,,,,,,,,
+Lilian,,,,,,,,,,,,,,,,,,,,,,,
+Alyssia,,,,,,,,,,,,,,,,,,,,,,,
+Responsable com,,,,,,,,,,,,,,,,,,,,,,,
+Axel,,,,,,,,,,,,,,,,,,,,,,,
+Manon,,,,,,,,,,,,,,,,,,,,,,,
+Delya,,,,,,,,,,,,,,,,,,,,,,,
+Lucas,,,,,,,,,,,,,,,,,,,,,,,

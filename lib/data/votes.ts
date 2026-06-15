@@ -1,4 +1,4 @@
-import { airtable, TABLES } from '../airtable';
+import { supabase } from '../supabase';
 
 export interface VoteMVPData {
   id: string;
@@ -10,65 +10,61 @@ export interface VoteMVPData {
   emailVotants?: string;
 }
 
+function mapRowToVote(row: any): VoteMVPData {
+  return {
+    id: row.id,
+    sport: row.sport || 'Basket',
+    joueurNomine: row.joueur_nomine || '',
+    equipe: row.equipe || '',
+    nombreVotes: row.nombre_votes || 0,
+    position: row.position || 0,
+    emailVotants: row.email_votants || '',
+  };
+}
+
 export async function getAllVotesMVP(): Promise<VoteMVPData[]> {
-  try {
-    const records = await airtable.getAll(TABLES.VOTES_MVP);
-    
-    return records.map((record: any) => ({
-      id: record.id,
-      sport: record.fields.Sport || 'Basket',
-      joueurNomine: record.fields['Joueur nominé'] || '',
-      equipe: record.fields.Équipe || '',
-      nombreVotes: record.fields['Nombre votes'] || 0,
-      position: record.fields.Position || 0,
-      emailVotants: record.fields['Email votants'],
-    }));
-  } catch (error) {
-    console.error('Erreur récupération votes MVP:', error);
-    return [];
-  }
+  const { data, error } = await supabase.from('votes_mvp').select('*');
+  if (error) { console.error('Erreur récupération votes MVP:', error); return []; }
+  return (data || []).map(mapRowToVote);
 }
 
 export async function getVotesBySport(sport: string): Promise<VoteMVPData[]> {
-  const all = await getAllVotesMVP();
-  return all.filter(v => v.sport === sport).sort((a, b) => b.nombreVotes - a.nombreVotes);
+  const { data, error } = await supabase
+    .from('votes_mvp')
+    .select('*')
+    .eq('sport', sport)
+    .order('nombre_votes', { ascending: false });
+  if (error) { console.error('Erreur récupération votes par sport:', error); return []; }
+  return (data || []).map(mapRowToVote);
 }
 
-export async function ajouterVote(
-  sport: string,
-  joueurNomine: string,
-  emailVotant: string
-): Promise<boolean> {
-  try {
-    // Récupérer tous les votes pour ce joueur
-    const votes = await getAllVotesMVP();
-    const vote = votes.find(v => v.sport === sport && v.joueurNomine === joueurNomine);
+export async function ajouterVote(sport: string, joueurNomine: string, emailVotant: string): Promise<boolean> {
+  const { data: votes, error } = await supabase
+    .from('votes_mvp')
+    .select('*')
+    .eq('sport', sport)
+    .eq('joueur_nomine', joueurNomine)
+    .single();
 
-    if (vote) {
-      // Vérifier si l'email a déjà voté
-      const emailsList = vote.emailVotants ? vote.emailVotants.split(',') : [];
-      if (emailsList.includes(emailVotant)) {
-        console.log('Déjà voté');
-        return false;
-      }
+  if (error || !votes) return false;
 
-      // Ajouter le vote
-      emailsList.push(emailVotant);
-      await airtable.update(TABLES.VOTES_MVP, vote.id, {
-        'Nombre votes': vote.nombreVotes + 1,
-        'Email votants': emailsList.join(','),
-      });
-      return true;
-    }
+  const emailsList = votes.email_votants ? votes.email_votants.split(',').filter(Boolean) : [];
+  if (emailsList.includes(emailVotant)) return false;
 
-    return false;
-  } catch (error) {
-    console.error('Erreur ajout vote:', error);
-    return false;
-  }
+  emailsList.push(emailVotant);
+  const { error: updateError } = await supabase
+    .from('votes_mvp')
+    .update({
+      nombre_votes: (votes.nombre_votes || 0) + 1,
+      email_votants: emailsList.join(','),
+    })
+    .eq('id', votes.id);
+
+  if (updateError) { console.error('Erreur ajout vote:', updateError); return false; }
+  return true;
 }
 
 export async function aDejaVote(email: string, sport: string): Promise<boolean> {
   const votes = await getVotesBySport(sport);
-  return votes.some(v => v.emailVotants && v.emailVotants.includes(email));
+  return votes.some(v => v.emailVotants && v.emailVotants.split(',').includes(email));
 }

@@ -1,4 +1,4 @@
-import { airtable, TABLES } from '../airtable';
+import { supabase } from '../supabase';
 
 export interface IncidentData {
   id: string;
@@ -16,40 +16,28 @@ export interface IncidentData {
   motUrgenceUtilise?: boolean;
 }
 
-function isAirtableUnauthorized(error: unknown): boolean {
-  return Boolean(
-    error &&
-      typeof error === 'object' &&
-      'statusCode' in error &&
-      (error as { statusCode?: number }).statusCode === 403
-  );
+function mapRowToIncident(row: any): IncidentData {
+  return {
+    id: row.id,
+    typeUrgence: row.type_urgence || 'Autre',
+    gravite: row.gravite || '🟢 Faible',
+    lieu: row.lieu || '',
+    description: row.description || '',
+    personneConcernee: row.personne_concernee || undefined,
+    contactSignalant: row.contact_signalant || '',
+    statut: row.statut || 'Signalé',
+    prisEnChargePar: row.pris_en_charge_par || undefined,
+    actionsPrises: row.actions_prises || undefined,
+    dateResolution: row.date_resolution || undefined,
+    notesInternes: row.notes_internes || undefined,
+    motUrgenceUtilise: row.mot_urgence_utilise || false,
+  };
 }
 
 export async function getAllIncidents(): Promise<IncidentData[]> {
-  try {
-    const records = await airtable.getAll(TABLES.INCIDENTS);
-    
-    return records.map((record: any) => ({
-      id: record.id,
-      typeUrgence: record.fields['Type urgence'] || 'Autre',
-      gravite: record.fields.Gravité || '🟢 Faible',
-      lieu: record.fields.Lieu || '',
-      description: record.fields.Description || '',
-      personneConcernee: record.fields['Personne concernée'],
-      contactSignalant: record.fields['Contact signalant'] || '',
-      statut: record.fields.Statut || 'Signalé',
-      prisEnChargePar: record.fields['Pris en charge par'],
-      actionsPrises: record.fields['Actions prises'],
-      dateResolution: record.fields['Date résolution'],
-      notesInternes: record.fields['Notes internes'],
-      motUrgenceUtilise: record.fields['Mot d\'urgence utilisé'] || false,
-    }));
-  } catch (error) {
-    if (!isAirtableUnauthorized(error)) {
-      console.error('Erreur récupération incidents:', error);
-    }
-    return [];
-  }
+  const { data, error } = await supabase.from('incidents_urgences').select('*');
+  if (error) { console.error('Erreur récupération incidents:', error); return []; }
+  return (data || []).map(mapRowToIncident);
 }
 
 export async function getIncidentsEnCours(): Promise<IncidentData[]> {
@@ -58,26 +46,23 @@ export async function getIncidentsEnCours(): Promise<IncidentData[]> {
 }
 
 export async function createIncident(data: Partial<IncidentData>): Promise<string | null> {
-  try {
-    const fields: any = {
-      'Type urgence': data.typeUrgence,
-      'Gravité': data.gravite,
-      'Lieu': data.lieu,
-      'Description': data.description,
-      'Personne concernée': data.personneConcernee || '',
-      'Contact signalant': data.contactSignalant,
-      'Statut': 'Signalé',
-      'Mot d\'urgence utilisé': data.motUrgenceUtilise || false,
-    };
+  const { data: row, error } = await supabase
+    .from('incidents_urgences')
+    .insert({
+      type_urgence: data.typeUrgence,
+      gravite: data.gravite,
+      lieu: data.lieu,
+      description: data.description,
+      personne_concernee: data.personneConcernee || null,
+      contact_signalant: data.contactSignalant,
+      statut: 'Signalé',
+      mot_urgence_utilise: data.motUrgenceUtilise || false,
+    })
+    .select('id')
+    .single();
 
-    const recordId = await airtable.create(TABLES.INCIDENTS, fields);
-    return recordId;
-  } catch (error) {
-    if (!isAirtableUnauthorized(error)) {
-      console.error('Erreur création incident:', error);
-    }
-    return null;
-  }
+  if (error) { console.error('Erreur création incident:', error); return null; }
+  return row?.id || null;
 }
 
 export async function updateIncidentStatut(
@@ -86,19 +71,12 @@ export async function updateIncidentStatut(
   prisEnChargePar?: string,
   actionsPrises?: string
 ): Promise<boolean> {
-  try {
-    const fields: any = { 'Statut': statut };
-    
-    if (prisEnChargePar) fields['Pris en charge par'] = prisEnChargePar;
-    if (actionsPrises) fields['Actions prises'] = actionsPrises;
-    if (statut === 'Résolu') fields['Date résolution'] = new Date().toISOString();
+  const payload: any = { statut };
+  if (prisEnChargePar) payload.pris_en_charge_par = prisEnChargePar;
+  if (actionsPrises) payload.actions_prises = actionsPrises;
+  if (statut === 'Résolu') payload.date_resolution = new Date().toISOString();
 
-    await airtable.update(TABLES.INCIDENTS, id, fields);
-    return true;
-  } catch (error) {
-    if (!isAirtableUnauthorized(error)) {
-      console.error('Erreur mise à jour incident:', error);
-    }
-    return false;
-  }
+  const { error } = await supabase.from('incidents_urgences').update(payload).eq('id', id);
+  if (error) { console.error('Erreur mise à jour incident:', error); return false; }
+  return true;
 }

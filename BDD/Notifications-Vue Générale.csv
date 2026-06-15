@@ -1,9 +1,9 @@
 ﻿Type,Titre,Message,Destinataires,Équipe cible,IUT cible,Date envoi,Envoyée,Nombre destinataires
-Match,Votre match dans 30 minutes,Votre match de basket commence dans 30 minutes sur le Terrain 1. Rendez-vous au vestiaire 3.,Équipe,Nancy-Charlemagne 1,,2027-01-14 08:30,Oui,10
-Alerte,Changement d'horaire - M015,Le match M015 est avancé à 14h30 (au lieu de 14h50). Merci de vous présenter 15min avant.,Équipe,Brabois 2,,2027-01-14 13:00,Oui,10
-Info,Bienvenue au Tournoi Inter-IUT Lorraine 2027!,Bienvenue à tous les participants! Retrouvez toutes les infos pratiques dans votre dashboard.,Tous,,,2027-01-14 07:00,Oui,300
-Urgence,Incident terrain 2 - Match reporté,Le match sur le Terrain 2 est reporté de 20 minutes suite à un incident technique.,Tous,,,2027-01-14 11:00,Oui,300
-Match,Résultats disponibles,Les résultats de votre match sont disponibles. Consultez le planning pour voir le score.,Équipe,Metz 1,,2027-01-14 10:00,Oui,10
-Info,Repas du soir - 19h30,Le repas BBQ aura lieu à 19h30 au gymnase Jules Ferry. Apportez votre ticket repas.,IUT,,IUT Nancy-Charlemagne,2027-01-14 18:00,Non,50
-Alerte,Navette retour Nancy - Départ 17h,Rappel: La navette retour pour Nancy part à 17h du parking POJC. Soyez à l'heure!,IUT,,IUT Nancy-Charlemagne,2027-01-15 15:00,Non,50
-Match,Demi-finale Basket - 09h00,Votre équipe est qualifiée pour la demi-finale de basket à 09h00 demain sur le Terrain 1. Félicitations!,Équipe,Nancy-Charlemagne 1,,2027-01-14 20:00,Oui,10
+Match,Votre match dans 30 minutes,Votre match de basket commence dans 30 minutes sur le Terrain 1. Rendez-vous au vestiaire 3.,Équipe,Nancy-Charlemagne 1,,2027-01-29 08:30,Oui,10
+Alerte,Changement d'horaire - M015,Le match M015 est avancé à 14h30 (au lieu de 14h50). Merci de vous présenter 15min avant.,Équipe,Brabois 2,,2027-01-29 13:00,Oui,10
+Info,Bienvenue au Tournoi Inter-IUT Lorraine 2027!,Bienvenue à tous les participants! Retrouvez toutes les infos pratiques dans votre dashboard.,Tous,,,2027-01-29 07:00,Oui,300
+Urgence,Incident terrain 2 - Match reporté,Le match sur le Terrain 2 est reporté de 20 minutes suite à un incident technique.,Tous,,,2027-01-29 11:00,Oui,300
+Match,Résultats disponibles,Les résultats de votre match sont disponibles. Consultez le planning pour voir le score.,Équipe,Metz 1,,2027-01-29 10:00,Oui,10
+Info,Repas du soir - 19h30,Le repas BBQ aura lieu à 19h30 au gymnase Jules Ferry. Apportez votre ticket repas.,IUT,,IUT Nancy-Charlemagne,2027-01-29 18:00,Non,50
+Alerte,Navette retour Nancy - Départ 17h,Rappel: La navette retour pour Nancy part à 17h du parking POJC. Soyez à l'heure!,IUT,,IUT Nancy-Charlemagne,2027-01-30 15:00,Non,50
+Match,Demi-finale Basket - 09h00,Votre équipe est qualifiée pour la demi-finale de basket à 09h00 demain sur le Terrain 1. Félicitations!,Équipe,Nancy-Charlemagne 1,,2027-01-29 20:00,Oui,10

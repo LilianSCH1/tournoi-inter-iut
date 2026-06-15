@@ -1,5 +1,4 @@
-// lib/data/equipes.ts
-import { airtable, TABLES } from '../airtable';
+import { supabase } from '../supabase';
 
 export interface EquipeData {
   id: string;
@@ -22,70 +21,43 @@ export interface EquipeCreateInput {
   nombreJoueurs: number;
 }
 
+function mapRowToEquipe(row: any): EquipeData {
+  return {
+    id: row.id,
+    nom: row.nom_equipe || '',
+    iut: row.iut || '',
+    numeroEquipe: row.numero_equipe || 0,
+    sportsPratiques: row.sports_pratiques || [],
+    pouleAssignee: row.poule_assignee,
+    statutInscription: row.statut_inscription || 'Incomplète',
+    codeEquipe: row.code_equipe,
+  };
+}
+
 export async function getAllEquipes(): Promise<EquipeData[]> {
-  try {
-    const records = await airtable.getAll(TABLES.EQUIPES);
-    
-    return records.map((record: any) => ({
-      id: record.id,
-      nom: record.fields['Nom équipe'] || '',
-      iut: Array.isArray(record.fields.IUT) ? record.fields.IUT[0] : record.fields.IUT || '',
-      numeroEquipe: record.fields['Numéro équipe'] || 0,
-      sportsPratiques: record.fields['Sports pratiqués'] || [],
-      pouleAssignee: record.fields['Poule assignée'],
-      statutInscription: record.fields['Statut inscription'] || 'Incomplète',
-      codeEquipe: record.fields['Code équipe'],
-    }));
-  } catch (error) {
-    console.error('Erreur récupération équipes:', error);
-    return [];
-  }
+  const { data, error } = await supabase.from('liste_equipes').select('*');
+  if (error) { console.error('Erreur récupération équipes:', error); return []; }
+  return (data || []).map(mapRowToEquipe);
 }
 
 export async function getEquipeByCode(code: string): Promise<EquipeData | null> {
-  try {
-    const records = await airtable.search(
-      TABLES.EQUIPES,
-      `{Code équipe} = "${code}"`
-    );
-    
-    if (records.length === 0) return null;
-    
-    const record = records[0] as any;
-    return {
-      id: record.id,
-      nom: record.fields['Nom équipe'] || '',
-      iut: Array.isArray(record.fields.IUT) ? record.fields.IUT[0] : record.fields.IUT || '',
-      numeroEquipe: record.fields['Numéro équipe'] || 0,
-      sportsPratiques: record.fields['Sports pratiqués'] || [],
-      pouleAssignee: record.fields['Poule assignée'],
-      statutInscription: record.fields['Statut inscription'] || 'Incomplète',
-      codeEquipe: record.fields['Code équipe'],
-    };
-  } catch (error) {
-    console.error('Erreur recherche équipe par code:', error);
-    return null;
-  }
+  const { data, error } = await supabase
+    .from('liste_equipes')
+    .select('*')
+    .eq('code_equipe', code)
+    .single();
+  if (error || !data) return null;
+  return mapRowToEquipe(data);
 }
 
 export async function getEquipeById(id: string): Promise<EquipeData | null> {
-  try {
-    const record = await airtable.getById(TABLES.EQUIPES, id) as any;
-    
-    return {
-      id: record.id,
-      nom: record.fields['Nom équipe'] || '',
-      iut: Array.isArray(record.fields.IUT) ? record.fields.IUT[0] : record.fields.IUT || '',
-      numeroEquipe: record.fields['Numéro équipe'] || 0,
-      sportsPratiques: record.fields['Sports pratiqués'] || [],
-      pouleAssignee: record.fields['Poule assignée'],
-      statutInscription: record.fields['Statut inscription'] || 'Incomplète',
-      codeEquipe: record.fields['Code équipe'],
-    };
-  } catch (error) {
-    console.error('Erreur récupération équipe par ID:', error);
-    return null;
-  }
+  const { data, error } = await supabase
+    .from('liste_equipes')
+    .select('*')
+    .eq('id', id)
+    .single();
+  if (error || !data) return null;
+  return mapRowToEquipe(data);
 }
 
 export async function getEquipeByNomEtIut(nom: string, iut?: string): Promise<EquipeData | null> {
@@ -95,38 +67,28 @@ export async function getEquipeByNomEtIut(nom: string, iut?: string): Promise<Eq
 
   if (!normalizedNom) return null;
 
-  const withSameName = all.filter((team) => team.nom.trim().toLowerCase() === normalizedNom);
+  const withSameName = all.filter(t => t.nom.trim().toLowerCase() === normalizedNom);
   if (!withSameName.length) return null;
-
   if (!normalizedIut) return withSameName[0];
 
-  return withSameName.find((team) => team.iut.trim().toLowerCase() === normalizedIut) || withSameName[0];
+  return withSameName.find(t => t.iut.trim().toLowerCase() === normalizedIut) || withSameName[0];
 }
 
 export async function createEquipe(input: EquipeCreateInput): Promise<EquipeData | null> {
-  try {
-    const record = await airtable.create(TABLES.EQUIPES, {
-      'Nom équipe': input.nom,
-      IUT: input.iut,
-      'Statut inscription': 'Validée',
-      'Capitaine nom': input.capitaineNom,
-      'Capitaine email': input.capitaineEmail,
-      'Capitaine téléphone': input.capitaineTelephone,
-      'Nombre joueurs': input.nombreJoueurs,
-    }) as any;
+  const { data, error } = await supabase
+    .from('liste_equipes')
+    .insert({
+      nom_equipe: input.nom,
+      iut: input.iut,
+      statut_inscription: 'Validée',
+      capitaine_nom: input.capitaineNom,
+      capitaine_email: input.capitaineEmail,
+      capitaine_telephone: input.capitaineTelephone,
+      nombre_joueurs: input.nombreJoueurs,
+    })
+    .select()
+    .single();
 
-    return {
-      id: record.id,
-      nom: record.fields['Nom équipe'] || '',
-      iut: Array.isArray(record.fields.IUT) ? record.fields.IUT[0] : record.fields.IUT || '',
-      numeroEquipe: record.fields['Numéro équipe'] || 0,
-      sportsPratiques: record.fields['Sports pratiqués'] || [],
-      pouleAssignee: record.fields['Poule assignée'],
-      statutInscription: record.fields['Statut inscription'] || 'Incomplète',
-      codeEquipe: record.fields['Code équipe'],
-    };
-  } catch (error) {
-    console.error('Erreur création équipe:', error);
-    return null;
-  }
+  if (error || !data) { console.error('Erreur création équipe:', error); return null; }
+  return mapRowToEquipe(data);
 }

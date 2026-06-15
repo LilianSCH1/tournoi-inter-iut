@@ -1,4 +1,4 @@
-import { airtable, TABLES } from '../airtable';
+import { supabase } from '../supabase';
 
 export interface ObjetPerduData {
   id: string;
@@ -14,73 +14,72 @@ export interface ObjetPerduData {
   declareParTelephone: string;
   statut: 'En cours' | 'Matché' | 'Rendu' | 'Clôturé';
   correspondanceId?: string;
-  photo?: any[];
+}
+
+function mapRowToObjet(row: any): ObjetPerduData {
+  return {
+    id: row.id,
+    type: row.type || 'Perdu',
+    objet: row.objet || '',
+    description: row.description || '',
+    couleur: row.couleur || undefined,
+    marque: row.marque || undefined,
+    lieu: row.lieu || '',
+    dateHeure: row.date_heure || '',
+    declareParNom: row.declare_par_nom || '',
+    declareParEmail: row.declare_par_email || '',
+    declareParTelephone: row.declare_par_telephone || '',
+    statut: row.statut || 'En cours',
+    correspondanceId: row.correspondance_id || undefined,
+  };
 }
 
 export async function getAllObjetsPerdus(): Promise<ObjetPerduData[]> {
-  try {
-    const records = await airtable.getAll(TABLES.OBJETS_PERDUS);
-    
-    return records.map((record: any) => ({
-      id: record.id,
-      type: record.fields.Type || 'Perdu',
-      objet: record.fields.Objet || '',
-      description: record.fields.Description || '',
-      couleur: record.fields.Couleur,
-      marque: record.fields.Marque,
-      lieu: record.fields.Lieu || '',
-      dateHeure: record.fields['Date/Heure'] || '',
-      declareParNom: record.fields['Déclaré par nom'] || '',
-      declareParEmail: record.fields['Déclaré par email'] || '',
-      declareParTelephone: record.fields['Déclaré par téléphone'] || '',
-      statut: record.fields.Statut || 'En cours',
-      correspondanceId: record.fields['Correspondance ID'],
-      photo: record.fields.Photo,
-    }));
-  } catch (error) {
-    console.error('Erreur récupération objets perdus:', error);
-    return [];
-  }
+  const { data, error } = await supabase.from('objets_perdus_trouves').select('*');
+  if (error) { console.error('Erreur récupération objets perdus:', error); return []; }
+  return (data || []).map(mapRowToObjet);
 }
 
 export async function getObjetsPerdusEnCours(): Promise<ObjetPerduData[]> {
-  const all = await getAllObjetsPerdus();
-  return all.filter(o => o.statut === 'En cours');
+  const { data, error } = await supabase
+    .from('objets_perdus_trouves')
+    .select('*')
+    .eq('statut', 'En cours');
+  if (error) { console.error('Erreur récupération objets en cours:', error); return []; }
+  return (data || []).map(mapRowToObjet);
 }
 
 export async function createObjetPerdu(data: Partial<ObjetPerduData>): Promise<string | null> {
-  try {
-    const fields: any = {
-      'Type': data.type,
-      'Objet': data.objet,
-      'Description': data.description,
-      'Couleur': data.couleur || '',
-      'Marque': data.marque || '',
-      'Lieu': data.lieu,
-      'Date/Heure': data.dateHeure || new Date().toISOString(),
-      'Déclaré par nom': data.declareParNom,
-      'Déclaré par email': data.declareParEmail,
-      'Déclaré par téléphone': data.declareParTelephone,
-      'Statut': 'En cours',
-    };
+  const { data: row, error } = await supabase
+    .from('objets_perdus_trouves')
+    .insert({
+      type: data.type,
+      objet: data.objet,
+      description: data.description,
+      couleur: data.couleur || null,
+      marque: data.marque || null,
+      lieu: data.lieu,
+      date_heure: data.dateHeure || new Date().toISOString(),
+      declare_par_nom: data.declareParNom,
+      declare_par_email: data.declareParEmail,
+      declare_par_telephone: data.declareParTelephone,
+      statut: 'En cours',
+    })
+    .select('id')
+    .single();
 
-    const recordId = await airtable.create(TABLES.OBJETS_PERDUS, fields);
-    return recordId;
-  } catch (error) {
-    console.error('Erreur création objet perdu:', error);
-    return null;
-  }
+  if (error) { console.error('Erreur création objet perdu:', error); return null; }
+  return row?.id || null;
 }
 
 export async function updateObjetStatut(
   id: string,
   statut: 'En cours' | 'Matché' | 'Rendu' | 'Clôturé'
 ): Promise<boolean> {
-  try {
-    await airtable.update(TABLES.OBJETS_PERDUS, id, { 'Statut': statut });
-    return true;
-  } catch (error) {
-    console.error('Erreur mise à jour objet:', error);
-    return false;
-  }
+  const { error } = await supabase
+    .from('objets_perdus_trouves')
+    .update({ statut })
+    .eq('id', id);
+  if (error) { console.error('Erreur mise à jour objet:', error); return false; }
+  return true;
 }

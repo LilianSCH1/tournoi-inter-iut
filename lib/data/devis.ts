@@ -1,4 +1,4 @@
-import { base, TABLES } from '../airtable';
+import { supabase } from '../supabase';
 
 export type DevisStatut = 'Envoyé' | 'Refus' | 'En attente' | 'Accord mutuel';
 
@@ -31,119 +31,77 @@ export interface DevisCreateInput {
   pieceJointeUrls?: string[];
 }
 
-function mapAttachments(value: unknown): AttachmentFile[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.map((attachment: any) => ({
-    id: attachment.id,
-    url: attachment.url,
-    filename: attachment.filename,
-    size: attachment.size,
-    type: attachment.type,
-  }));
-}
-
-function mapRecord(record: any): DevisData {
+function mapRowToDevis(row: any): DevisData {
   return {
-    id: record.id,
-    titre: record.fields['Titre'] || '',
-    montant: record.fields['Montant'] || 0,
-    assigne: record.fields['Assigné'],
-    statut: record.fields['Statut'] || 'En attente',
-    dateReception: record.fields['Date réception'],
-    notes: record.fields['Notes'],
-    piecesJointes: mapAttachments(record.fields['Pièces jointes']),
+    id: row.id,
+    titre: row.titre || '',
+    montant: row.montant || 0,
+    assigne: row.assigne,
+    statut: row.statut || 'En attente',
+    dateReception: row.date_reception,
+    notes: row.notes,
+    piecesJointes: Array.isArray(row.pieces_jointes) ? row.pieces_jointes : [],
   };
 }
 
 export async function getAllDevis(): Promise<DevisData[]> {
-  try {
-    const records = await base(TABLES.DEVIS).select().all();
-    return records.map(mapRecord);
-  } catch (error) {
-    console.error('Erreur récupération devis:', error);
-    return [];
-  }
+  const { data, error } = await supabase.from('devis_pieces_jointes').select('*');
+  if (error) { console.error('Erreur récupération devis:', error); return []; }
+  return (data || []).map(mapRowToDevis);
 }
 
 export async function getDevisById(id: string): Promise<DevisData | null> {
-  try {
-    const record = await base(TABLES.DEVIS).find(id);
-    return mapRecord(record);
-  } catch (error) {
-    console.error('Erreur récupération devis:', error);
-    return null;
-  }
+  const { data, error } = await supabase.from('devis_pieces_jointes').select('*').eq('id', id).single();
+  if (error || !data) return null;
+  return mapRowToDevis(data);
 }
 
 export async function getDevisByStatut(statut: DevisStatut | string): Promise<DevisData[]> {
-  try {
-    const allDevis = await getAllDevis();
-    return allDevis.filter((d) => d.statut === statut);
-  } catch (error) {
-    console.error('Erreur filtrage devis:', error);
-    return [];
-  }
+  const { data, error } = await supabase
+    .from('devis_pieces_jointes')
+    .select('*')
+    .eq('statut', statut);
+  if (error) { console.error('Erreur filtrage devis:', error); return []; }
+  return (data || []).map(mapRowToDevis);
 }
 
 export async function getDevisByAssigne(assigne: string): Promise<DevisData[]> {
-  try {
-    const normalized = String(assigne || '').trim().toLowerCase();
-    if (!normalized) {
-      return [];
-    }
-
-    const allDevis = await getAllDevis();
-    return allDevis.filter((devis) => String(devis.assigne || '').trim().toLowerCase() === normalized);
-  } catch (error) {
-    console.error('Erreur filtrage devis par personne:', error);
-    return [];
-  }
+  const normalized = String(assigne || '').trim().toLowerCase();
+  if (!normalized) return [];
+  const all = await getAllDevis();
+  return all.filter(d => String(d.assigne || '').trim().toLowerCase() === normalized);
 }
 
 export async function createDevis(input: DevisCreateInput): Promise<DevisData | null> {
-  try {
-    const payload: any = {
-      Titre: input.titre,
-      Montant: input.montant,
-      'Assigné': input.assigne,
-      Statut: input.statut || 'En attente',
-      'Date réception': input.dateReception || new Date().toISOString().slice(0, 10),
-      Notes: input.notes || '',
-      ...(input.pieceJointeUrls && input.pieceJointeUrls.length > 0
-        ? {
-            'Pièces jointes': input.pieceJointeUrls.map((url) => ({ url })),
-          }
-        : {}),
-    };
+  const piecesJointes = (input.pieceJointeUrls || []).map(url => ({ url }));
 
-    const created = await base(TABLES.DEVIS).create(payload);
+  const { data, error } = await supabase
+    .from('devis_pieces_jointes')
+    .insert({
+      titre: input.titre,
+      montant: input.montant,
+      assigne: input.assigne,
+      statut: input.statut || 'En attente',
+      date_reception: input.dateReception || new Date().toISOString().slice(0, 10),
+      notes: input.notes || null,
+      pieces_jointes: piecesJointes,
+    })
+    .select()
+    .single();
 
-    return mapRecord(created as any);
-  } catch (error) {
-    console.error('Erreur création devis:', error);
-    return null;
-  }
+  if (error) { console.error('Erreur création devis:', error); return null; }
+  return mapRowToDevis(data);
 }
 
 export async function getTotalDevis(): Promise<number> {
-  try {
-    const allDevis = await getAllDevis();
-    return allDevis.reduce((total, devis) => total + devis.montant, 0);
-  } catch (error) {
-    console.error('Erreur calcul total devis:', error);
-    return 0;
-  }
+  const all = await getAllDevis();
+  return all.reduce((total, d) => total + d.montant, 0);
 }
 
 export async function updateDevisStatut(id: string, newStatut: DevisStatut | string): Promise<void> {
-  try {
-    await base(TABLES.DEVIS).update(id, {
-      Statut: newStatut,
-    });
-  } catch (error) {
-    console.error('Erreur mise à jour statut devis:', error);
-  }
+  const { error } = await supabase
+    .from('devis_pieces_jointes')
+    .update({ statut: newStatut })
+    .eq('id', id);
+  if (error) console.error('Erreur mise à jour statut devis:', error);
 }
