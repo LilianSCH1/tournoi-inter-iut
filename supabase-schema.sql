@@ -118,34 +118,6 @@ CREATE TABLE IF NOT EXISTS incidents_urgences (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS objets_perdus_trouves (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  type TEXT DEFAULT 'Perdu',
-  objet TEXT NOT NULL DEFAULT '',
-  description TEXT DEFAULT '',
-  couleur TEXT,
-  marque TEXT,
-  lieu TEXT DEFAULT '',
-  date_heure TIMESTAMPTZ DEFAULT NOW(),
-  declare_par_nom TEXT DEFAULT '',
-  declare_par_email TEXT DEFAULT '',
-  declare_par_telephone TEXT DEFAULT '',
-  statut TEXT DEFAULT 'En cours',
-  correspondance_id TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS votes_mvp (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  sport TEXT DEFAULT '',
-  joueur_nomine TEXT NOT NULL DEFAULT '',
-  equipe TEXT DEFAULT '',
-  nombre_votes INTEGER DEFAULT 0,
-  position INTEGER DEFAULT 0,
-  email_votants TEXT DEFAULT '',
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
 CREATE TABLE IF NOT EXISTS devis_pieces_jointes (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   titre TEXT NOT NULL DEFAULT '',
@@ -166,6 +138,4 @@ ALTER TABLE orga_matchs DISABLE ROW LEVEL SECURITY;
 ALTER TABLE logi_budget DISABLE ROW LEVEL SECURITY;
 ALTER TABLE todo_list DISABLE ROW LEVEL SECURITY;
 ALTER TABLE incidents_urgences DISABLE ROW LEVEL SECURITY;
-ALTER TABLE objets_perdus_trouves DISABLE ROW LEVEL SECURITY;
-ALTER TABLE votes_mvp DISABLE ROW LEVEL SECURITY;
 ALTER TABLE devis_pieces_jointes DISABLE ROW LEVEL SECURITY;

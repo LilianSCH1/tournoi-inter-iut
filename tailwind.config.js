@@ -17,37 +17,43 @@ module.exports = {
     },
     extend: {
       colors: {
-        // Couleurs Lorraine
         lorraine: {
-          blue: '#004B87',      // Bleu Lorraine (primaire)
-          red: '#DC143C',       // Rouge Lorraine (accent/urgences)
-          gold: '#FFD700',      // Or (trophées/podiums)
+          blue: '#0D0D0D',
+          red: '#DC2626',
+          gold: '#FFEF3F',
+          yellow: '#FFEF3F',
+          black: '#0D0D0D',
         },
-        // Couleurs système
+        sport: {
+          yellow: '#FFEF3F',
+          black: '#0D0D0D',
+          dark: '#1A1A1A',
+          gray: '#F5F5F5',
+        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
         primary: {
-          DEFAULT: '#004B87',
-          foreground: '#ffffff',
+          DEFAULT: '#FFEF3F',
+          foreground: '#0D0D0D',
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
           foreground: "hsl(var(--secondary-foreground))",
         },
         destructive: {
-          DEFAULT: '#DC143C',
-          foreground: "hsl(var(--destructive-foreground))",
+          DEFAULT: '#DC2626',
+          foreground: '#ffffff',
         },
         muted: {
           DEFAULT: "hsl(var(--muted))",
           foreground: "hsl(var(--muted-foreground))",
         },
         accent: {
-          DEFAULT: '#DC143C',
-          foreground: "hsl(var(--accent-foreground))",
+          DEFAULT: '#FFEF3F',
+          foreground: '#0D0D0D',
         },
         popover: {
           DEFAULT: "hsl(var(--popover))",
@@ -61,7 +67,7 @@ module.exports = {
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        sm: "0px",
       },
       keyframes: {
         "accordion-down": {
