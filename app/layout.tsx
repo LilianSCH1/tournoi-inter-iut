@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   title: 'Tournoi Inter-IUT Lorraine 2027',
   description: '300 étudiants, 7 IUT, 4 sports - POJC Saint-Dié-des-Vosges',
   icons: {
-    icon: '/logo.png',
+    icon: '/Logo_Tournoi_IUT_noir.png',
   },
 };
 

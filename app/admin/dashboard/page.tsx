@@ -1,8 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { LogOut, Users, Trophy, DollarSign, AlertCircle, CheckCircle } from 'lucide-react';
+import { LogOut, Users, Trophy, DollarSign, AlertCircle, CheckCircle, ClipboardList } from 'lucide-react';
+
+const BUDGET_CATEGORIES = ['Logistique', 'Sport', 'Communication', 'Restauration', 'Hébergement', 'Transport', 'Autre'];
+const POULE_OPTIONS = ['', 'Poule A', 'Poule B', 'Poule C', 'Poule D'];
+const TACHE_PRIORITES = ['Normale', 'Importante', 'Urgente', 'Critique'];
+const TACHE_CATEGORIES = ['Logistique', 'Sport', 'Communication', 'Restauration', 'Hébergement', 'Transport', 'Sécurité', 'Autre'];
 
 interface AdminDashboardApiData {
   overview: {
@@ -21,6 +27,9 @@ interface AdminDashboardApiData {
     nom: string;
     statutParticipation: string;
     nombreParticipants: number;
+    nombreSpectateurs: number;
+    transportSouhaite: string;
+    hebergementRequis: string;
     budgetPaye: boolean;
   }>;
   equipes: Array<{
@@ -28,7 +37,10 @@ interface AdminDashboardApiData {
     nom: string;
     iut: string;
     statutInscription: string;
-    sportsPratiques: string[];
+    statutValidation: 'En attente' | 'Validée' | 'Refusée';
+    documentsValides: boolean;
+    motifRefus?: string;
+    pouleAssignee?: string;
   }>;
   matchs: Array<{
     id: string;
@@ -53,6 +65,12 @@ interface AdminDashboardApiData {
     type: string;
     licenceValidee: boolean;
     arriveeConfirmee: boolean;
+    allergiesAlimentaires?: string;
+    tailleMaillot?: string;
+    licenceSportive?: string;
+    transport?: string;
+    hebergement?: boolean;
+    departConfirme?: boolean;
   }>;
   budget: Array<{
     id: string;
@@ -140,6 +158,27 @@ export default function DashboardAdminPage() {
     scoreB: string;
     statut: 'Programmé' | 'En cours' | 'Terminé';
   }>>({});
+  const [uiMessage, setUiMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [candidatureSaving, setCandidatureSaving] = useState<string | null>(null);
+  const [motifRefusDraft, setMotifRefusDraft] = useState<Record<string, string>>({});
+  const [iutSaving, setIutSaving] = useState<string | null>(null);
+  const [creatingMatch, setCreatingMatch] = useState(false);
+  const [newMatch, setNewMatch] = useState({
+    idMatch: '', sport: '', phase: '', date: '', heureDebut: '', terrain: '', equipeA: '', equipeB: '',
+  });
+  const [taches, setTaches] = useState<Array<{
+    id: string; tache: string; description: string; responsable: string; statut: string; priorite: string; deadline: string; categorie: string;
+  }>>([]);
+  const [creatingTache, setCreatingTache] = useState(false);
+  const [newTache, setNewTache] = useState({
+    tache: '', description: '', responsable: '', priorite: 'Normale', deadline: '', categorie: 'Logistique',
+  });
+  const [tacheSaving, setTacheSaving] = useState<string | null>(null);
+
+  const showUiMessage = (type: 'success' | 'error', text: string) => {
+    setUiMessage({ type, text });
+    setTimeout(() => setUiMessage(null), 3200);
+  };
 
   const loadAdminData = async () => {
     try {
@@ -148,6 +187,11 @@ export default function DashboardAdminPage() {
         fetch('/api/incidents', { cache: 'no-store' }),
       ]);
 
+      if (dashboardRes.status === 401 || dashboardRes.status === 403) {
+        sessionStorage.removeItem('admin_session');
+        router.push('/admin/login');
+        return;
+      }
       if (!dashboardRes.ok) throw new Error('Erreur API dashboard');
 
       const dashboardJson = await dashboardRes.json();
@@ -183,7 +227,7 @@ export default function DashboardAdminPage() {
       if (!res.ok) throw new Error('Erreur incident');
       await loadAdminData();
     } catch {
-      alert('Impossible de mettre à jour cet incident.');
+      showUiMessage('error', 'Impossible de mettre à jour cet incident.');
     } finally {
       setIncidentSaving(null);
     }
@@ -226,7 +270,7 @@ export default function DashboardAdminPage() {
     const hasScoreB = patch.scoreB.trim() !== '';
 
     if (hasScoreA !== hasScoreB) {
-      alert('Pour enregistrer un score, renseignez les deux équipes.');
+      showUiMessage('error', 'Pour enregistrer un score, renseignez les deux équipes.');
       return;
     }
 
@@ -239,7 +283,7 @@ export default function DashboardAdminPage() {
       const parsedA = Number(patch.scoreA);
       const parsedB = Number(patch.scoreB);
       if (!Number.isFinite(parsedA) || !Number.isFinite(parsedB)) {
-        alert('Les scores doivent être des nombres valides.');
+        showUiMessage('error', 'Les scores doivent être des nombres valides.');
         return;
       }
       payload.scoreA = parsedA;
@@ -267,28 +311,43 @@ export default function DashboardAdminPage() {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Impossible de sauvegarder ce match.';
-      alert(message);
+      showUiMessage('error', message);
     } finally {
       setMatchSaving(null);
     }
   };
 
   useEffect(() => {
-    const session = sessionStorage.getItem('admin_session');
-    if (!session) {
-      router.push('/admin/login');
-      return;
-    }
-    setAdminData(JSON.parse(session));
+    let interval: ReturnType<typeof setInterval> | undefined;
 
-    loadAdminData();
-    const interval = setInterval(loadAdminData, 10000);
-    return () => clearInterval(interval);
+    const init = async () => {
+      const res = await fetch('/api/auth/session', { cache: 'no-store' });
+      if (!res.ok) {
+        sessionStorage.removeItem('admin_session');
+        router.push('/admin/login');
+        return;
+      }
+      const { session } = await res.json();
+      sessionStorage.setItem('admin_session', JSON.stringify(session));
+      setAdminData(session);
+      loadAdminData();
+      loadTaches();
+      interval = setInterval(loadAdminData, 10000);
+    };
+
+    init();
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [router]);
 
-  const handleLogout = () => {
-    sessionStorage.removeItem('admin_session');
-    router.push('/');
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } finally {
+      sessionStorage.removeItem('admin_session');
+      router.push('/');
+    }
   };
 
   const handleBudgetFieldChange = (
@@ -337,7 +396,7 @@ export default function DashboardAdminPage() {
         return clone;
       });
     } catch {
-      alert('Impossible de sauvegarder la ligne budget.');
+      showUiMessage('error', 'Impossible de sauvegarder la ligne budget.');
     } finally {
       setBudgetSaving(null);
     }
@@ -345,7 +404,7 @@ export default function DashboardAdminPage() {
 
   const createBudgetLine = async () => {
     if (!newBudgetLine.poste.trim()) {
-      alert('Le poste est obligatoire.');
+      showUiMessage('error', 'Le poste est obligatoire.');
       return;
     }
 
@@ -370,7 +429,7 @@ export default function DashboardAdminPage() {
 
       await loadAdminData();
     } catch {
-      alert('Impossible d\'ajouter la ligne budget.');
+      showUiMessage('error', 'Impossible d\'ajouter la ligne budget.');
     } finally {
       setCreatingBudgetLine(false);
     }
@@ -388,7 +447,7 @@ export default function DashboardAdminPage() {
       await loadAdminData();
       if (action === 'add') setPlayerSearch('');
     } catch {
-      alert('Impossible de mettre à jour les joueurs de cette équipe.');
+      showUiMessage('error', 'Impossible de mettre à jour les joueurs de cette équipe.');
     } finally {
       setRosterSaving(null);
     }
@@ -408,14 +467,19 @@ export default function DashboardAdminPage() {
       });
 
       if (!res.ok) throw new Error('Erreur rôle');
+      const data = await res.json().catch(() => ({}));
       await loadAdminData();
 
       if (type === 'Bénévole') {
-        const defaultPassword = 'Benevole2027!';
-        alert(`Compte bénévole activé pour ${email || 'cet utilisateur'}. Login: ${email || 'Email manquant'} / mot de passe: ${defaultPassword}`);
+        const password = data?.benevolePassword;
+        alert(
+          password
+            ? `Compte bénévole activé pour ${email || 'cet utilisateur'}. Login: ${email || 'Email manquant'} / mot de passe: ${password}`
+            : `Compte bénévole activé pour ${email || 'cet utilisateur'}, mais le mot de passe n'a pas pu être généré. Réessayez ou contactez l'admin technique.`
+        );
       }
     } catch {
-      alert('Impossible de mettre à jour le rôle participant.');
+      showUiMessage('error', 'Impossible de mettre à jour le rôle participant.');
     } finally {
       setParticipantSaving(null);
     }
@@ -433,16 +497,187 @@ export default function DashboardAdminPage() {
       if (!res.ok) throw new Error('Erreur équipe');
       await loadAdminData();
     } catch {
-      alert('Impossible d\'affecter ce participant à une équipe.');
+      showUiMessage('error', 'Impossible d\'affecter ce participant à une équipe.');
     } finally {
       setParticipantSaving(null);
+    }
+  };
+
+  const updateEquipePoule = async (equipeId: string, pouleAssignee: string) => {
+    try {
+      setCandidatureSaving(equipeId);
+      const res = await fetch('/api/equipes', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ equipeId, pouleAssignee }),
+      });
+      if (!res.ok) throw new Error('Erreur poule');
+      await loadAdminData();
+    } catch {
+      showUiMessage('error', 'Impossible d\'affecter la poule.');
+    } finally {
+      setCandidatureSaving(null);
+    }
+  };
+
+  const updateEquipeCandidature = async (
+    equipeId: string,
+    statutValidation: 'Validée' | 'Refusée',
+    documentsValides?: boolean
+  ) => {
+    if (statutValidation === 'Refusée' && !motifRefusDraft[equipeId]?.trim()) {
+      showUiMessage('error', 'Indiquez un motif de refus avant de refuser cette candidature.');
+      return;
+    }
+
+    try {
+      setCandidatureSaving(equipeId);
+      const res = await fetch('/api/equipes', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          equipeId,
+          statutValidation,
+          documentsValides,
+          motifRefus: motifRefusDraft[equipeId],
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Erreur candidature');
+      }
+      showUiMessage(
+        'success',
+        statutValidation === 'Validée'
+          ? 'Candidature validée : les joueurs peuvent maintenant se connecter.'
+          : 'Candidature refusée : le roster a été libéré (joueurs repassés en spectateurs).'
+      );
+      await loadAdminData();
+    } catch (error) {
+      showUiMessage('error', (error as Error).message || 'Impossible de mettre à jour la candidature.');
+    } finally {
+      setCandidatureSaving(null);
+    }
+  };
+
+  const toggleDocumentsValides = async (equipeId: string, statutValidation: string, value: boolean) => {
+    try {
+      setCandidatureSaving(equipeId);
+      const res = await fetch('/api/equipes', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ equipeId, statutValidation, documentsValides: value }),
+      });
+      if (!res.ok) throw new Error('Erreur documents');
+      await loadAdminData();
+    } catch {
+      showUiMessage('error', 'Impossible de mettre à jour les documents.');
+    } finally {
+      setCandidatureSaving(null);
+    }
+  };
+
+  const updateIutField = async (id: string, fields: { statutParticipation?: string; budgetPaye?: boolean }) => {
+    try {
+      setIutSaving(id);
+      const res = await fetch('/api/iut', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, ...fields }),
+      });
+      if (!res.ok) throw new Error('Erreur IUT');
+      await loadAdminData();
+    } catch {
+      showUiMessage('error', 'Impossible de mettre à jour cet IUT.');
+    } finally {
+      setIutSaving(null);
+    }
+  };
+
+  const createMatchHandler = async () => {
+    if (!newMatch.sport.trim() || !newMatch.phase.trim() || !newMatch.date || !newMatch.heureDebut || !newMatch.terrain.trim()) {
+      showUiMessage('error', 'Sport, phase, date, heure et terrain sont obligatoires.');
+      return;
+    }
+
+    try {
+      setCreatingMatch(true);
+      const res = await fetch('/api/matchs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newMatch),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Erreur création match');
+      }
+      setNewMatch({ idMatch: '', sport: '', phase: '', date: '', heureDebut: '', terrain: '', equipeA: '', equipeB: '' });
+      showUiMessage('success', 'Match créé.');
+      await loadAdminData();
+    } catch (error) {
+      showUiMessage('error', (error as Error).message || 'Impossible de créer ce match.');
+    } finally {
+      setCreatingMatch(false);
+    }
+  };
+
+  const loadTaches = async () => {
+    try {
+      const res = await fetch('/api/taches', { cache: 'no-store' });
+      if (res.ok) setTaches(await res.json());
+    } catch (error) {
+      console.error('Erreur chargement tâches:', error);
+    }
+  };
+
+  const createTacheHandler = async () => {
+    if (!newTache.tache.trim() || !newTache.responsable.trim()) {
+      showUiMessage('error', 'Tâche et responsable sont obligatoires.');
+      return;
+    }
+
+    try {
+      setCreatingTache(true);
+      const res = await fetch('/api/taches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newTache),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Erreur création tâche');
+      }
+      setNewTache({ tache: '', description: '', responsable: '', priorite: 'Normale', deadline: '', categorie: 'Logistique' });
+      showUiMessage('success', 'Tâche créée.');
+      await loadTaches();
+    } catch (error) {
+      showUiMessage('error', (error as Error).message || 'Impossible de créer cette tâche.');
+    } finally {
+      setCreatingTache(false);
+    }
+  };
+
+  const updateTacheStatutHandler = async (id: string, statut: string) => {
+    try {
+      setTacheSaving(id);
+      const res = await fetch(`/api/taches/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ statut }),
+      });
+      if (!res.ok) throw new Error('Erreur statut tâche');
+      await loadTaches();
+    } catch {
+      showUiMessage('error', 'Impossible de mettre à jour cette tâche.');
+    } finally {
+      setTacheSaving(null);
     }
   };
 
   if (!adminData || loadingData) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-lorraine-blue"></div>
+        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-[#FFEF3F]"></div>
       </div>
     );
   }
@@ -511,16 +746,20 @@ export default function DashboardAdminPage() {
   return (
     <div className="min-h-screen">
       {/* Header */}
-      <div className="bg-gradient-to-r from-gray-900 to-gray-800 text-white shadow-lg">
+      <div className="bg-[#0D0D0D] border-b-[3px] border-[#FFEF3F] text-white shadow-lg">
         <div className="container mx-auto px-4 py-6">
           <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold">🚀 Dashboard Admin</h1>
-              <p className="text-gray-300 mt-1">{adminData.email}</p>
+            <div className="flex items-center gap-3">
+              <Image src="/Logo_Tournoi_IUT_jaune.png" alt="Logo" width={40} height={40} className="flex-shrink-0" />
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.22em] text-gray-500 mb-1">Espace Admin</p>
+                <h1 className="text-xl font-black uppercase text-white tracking-wide">Dashboard</h1>
+                <p className="text-sm text-[#FFEF3F] mt-0.5">{adminData.email}</p>
+              </div>
             </div>
             <button
               onClick={handleLogout}
-              className="flex items-center gap-2 bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg transition-colors"
+              className="flex items-center gap-2 border border-white/20 hover:border-[#FFEF3F] hover:text-[#FFEF3F] text-gray-400 px-4 py-2 text-sm transition-colors uppercase tracking-wide font-semibold"
             >
               <LogOut className="w-4 h-4" />
               Déconnexion
@@ -530,26 +769,27 @@ export default function DashboardAdminPage() {
       </div>
 
       {/* Tabs */}
-      <div className="panel border-b border-slate-200/70">
-        <div className="container mx-auto px-4">
-          <div className="flex gap-6">
+      <div className="panel border-b border-gray-100">
+        <div className="container mx-auto px-4 overflow-x-auto">
+          <div className="flex min-w-max">
             {[
-              { id: 'overview', label: '📊 Vue d\'ensemble' },
-              { id: 'iut', label: '🏫 IUT' },
-              { id: 'equipes', label: '👥 Équipes' },
-              { id: 'matchs', label: '🏆 Matchs' },
-              { id: 'incidents', label: '🚨 Incidents' },
-              { id: 'participants', label: '🧑 Participants' },
-              { id: 'budget', label: '💰 Budget' },
-              { id: 'devis', label: '🧾 Devis' },
+              { id: 'overview', label: 'Vue d\'ensemble' },
+              { id: 'iut', label: 'IUT' },
+              { id: 'equipes', label: 'Équipes' },
+              { id: 'matchs', label: 'Matchs' },
+              { id: 'incidents', label: 'Incidents' },
+              { id: 'participants', label: 'Participants' },
+              { id: 'taches', label: 'Tâches' },
+              { id: 'budget', label: 'Budget' },
+              { id: 'devis', label: 'Devis' },
             ].map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`py-4 px-2 border-b-2 font-medium transition-colors ${
+                className={`py-3.5 px-4 border-b-2 text-sm font-bold uppercase tracking-wide transition-colors whitespace-nowrap ${
                   activeTab === tab.id
-                    ? 'border-lorraine-blue text-lorraine-blue'
-                    : 'border-transparent text-gray-600 hover:text-gray-900'
+                    ? 'border-[#FFEF3F] text-[#0D0D0D] bg-[#FFEF3F]/5'
+                    : 'border-transparent text-gray-500 hover:text-[#0D0D0D] hover:bg-gray-50'
                 }`}
               >
                 {tab.label}
@@ -560,154 +800,161 @@ export default function DashboardAdminPage() {
       </div>
 
       <div className="container mx-auto px-4 py-8">
+        {uiMessage && (
+          <div
+            className={`mb-6 border-l-4 px-4 py-3 text-sm font-semibold ${
+              uiMessage.type === 'success'
+                ? 'border-green-500 bg-green-50 text-green-800'
+                : 'border-[#DC2626] bg-red-50 text-red-700'
+            }`}
+          >
+            {uiMessage.text}
+          </div>
+        )}
+
         {activeTab === 'overview' && (
           <div>
             {/* KPIs */}
             <div className="grid md:grid-cols-4 gap-6 mb-8">
-              <div className="panel-raised rounded-lg p-6 border-l-4 border-green-500">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm text-gray-600">IUT Confirmés</p>
-                  <CheckCircle className="w-5 h-5 text-green-600" />
+              <div className="stat-card border-l-4 border-white/20">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-[10px] uppercase tracking-widest font-bold text-gray-400">IUT Confirmés</p>
+                  <CheckCircle className="w-4 h-4 text-[#FFEF3F]" />
                 </div>
-                <p className="text-3xl font-bold text-green-600">
+                <p className="text-3xl font-black text-white">
                   {overview?.iutConfirmes ?? 0}/{overview?.iutTotal ?? 0}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">Synchronisé Airtable</p>
+                <p className="text-xs text-gray-400 mt-1">Synchronisé Airtable</p>
               </div>
 
-              <div className="panel-raised rounded-lg p-6 border-l-4 border-blue-500">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm text-gray-600">Participants</p>
-                  <Users className="w-5 h-5 text-blue-600" />
+              <div className="stat-card border-l-4 border-[#FFEF3F]">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-[10px] uppercase tracking-widest font-bold text-gray-400">Participants</p>
+                  <Users className="w-4 h-4 text-[#FFEF3F]" />
                 </div>
-                <p className="text-3xl font-bold text-blue-600">
+                <p className="text-3xl font-black text-white">
                   {overview?.participantsInscrits ?? 0}/{overview?.participantsTotal ?? 300}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">Mis à jour toutes les 10s</p>
+                <p className="text-xs text-gray-400 mt-1">Mis à jour toutes les 10s</p>
               </div>
 
-              <div className="panel-raised rounded-lg p-6 border-l-4 border-yellow-500">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm text-gray-600">Budget</p>
-                  <DollarSign className="w-5 h-5 text-yellow-600" />
+              <div className="stat-card border-l-4 border-[#FFEF3F]">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-[10px] uppercase tracking-widest font-bold text-gray-400">Budget collecté</p>
+                  <DollarSign className="w-4 h-4 text-[#FFEF3F]" />
                 </div>
-                <p className="text-3xl font-bold text-yellow-600">
+                <p className="text-3xl font-black text-white">
                   {(overview?.budgetCollecte ?? 0).toLocaleString('fr-FR')}€
                 </p>
-                <p className="text-xs text-gray-500 mt-1">sur {(overview?.budgetPrevu ?? 0).toLocaleString('fr-FR')}€</p>
+                <p className="text-xs text-gray-400 mt-1">sur {(overview?.budgetPrevu ?? 0).toLocaleString('fr-FR')}€</p>
               </div>
 
-              <div className="panel-raised rounded-lg p-6 border-l-4 border-red-500">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm text-gray-600">Tâches Urgentes</p>
-                  <AlertCircle className="w-5 h-5 text-red-600" />
+              <div className="stat-card border-l-4 border-[#DC2626]">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-[10px] uppercase tracking-widest font-bold text-gray-400">Tâches urgentes</p>
+                  <AlertCircle className="w-4 h-4 text-[#DC2626]" />
                 </div>
-                <p className="text-3xl font-bold text-red-600">{overview?.tachesUrgentes ?? 0}</p>
-                <p className="text-xs text-gray-500 mt-1">Priorité critique dans ToDo</p>
+                <p className="text-3xl font-black text-white">{overview?.tachesUrgentes ?? 0}</p>
+                <p className="text-xs text-gray-400 mt-1">Priorité critique</p>
               </div>
 
-              <div className="panel-raised rounded-lg p-6 border-l-4 border-slate-500">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm text-gray-600">Devis</p>
-                  <DollarSign className="w-5 h-5 text-slate-600" />
+              <div className="stat-card border-l-4 border-white/20">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-[10px] uppercase tracking-widest font-bold text-gray-400">Devis</p>
+                  <DollarSign className="w-4 h-4 text-[#FFEF3F]" />
                 </div>
-                <p className="text-3xl font-bold text-slate-700">{overview?.devisTotal ?? 0}</p>
-                <p className="text-xs text-gray-500 mt-1">{overview?.devisEnAttente ?? 0} en attente</p>
+                <p className="text-3xl font-black text-white">{overview?.devisTotal ?? 0}</p>
+                <p className="text-xs text-gray-400 mt-1">{overview?.devisEnAttente ?? 0} en attente</p>
               </div>
             </div>
 
             {/* Planning du jour */}
             <div className="grid md:grid-cols-2 gap-6 mb-8">
-              <div className="panel-raised rounded-lg">
-                <div className="p-6 panel-deep rounded-t-lg">
-                  <h2 className="text-xl font-bold flex items-center gap-2">
-                    <Trophy className="w-5 h-5 text-lorraine-blue" />
+              <div className="panel-raised">
+                <div className="p-5 panel-deep border-b border-gray-100">
+                  <h2 className="text-sm font-black uppercase tracking-widest text-[#0D0D0D] flex items-center gap-2">
+                    <Trophy className="w-4 h-4" />
                     Planning aujourd'hui
                   </h2>
                 </div>
-                <div className="p-6">
-                  <div className="space-y-3">
-                    {matchsDuJour.map((match) => (
-                      <div key={match.id} className="flex items-center justify-between p-3 panel-deep rounded-lg">
-                        <div>
-                          <div className="font-semibold">{match.idMatch} - {match.sport}</div>
-                          <div className="text-sm text-gray-600">{match.equipeA} vs {match.equipeB}</div>
-                        </div>
-                        <div className="text-right">
-                          <div className="font-bold">{match.heureDebut}</div>
-                          <div className="text-xs bg-gray-200 text-gray-800 px-2 py-1 rounded mt-1">
-                            {match.statut}
-                          </div>
-                        </div>
+                <div className="p-4 space-y-2">
+                  {matchsDuJour.length === 0 && <p className="text-sm text-gray-400">Aucun match aujourd'hui.</p>}
+                  {matchsDuJour.map((match) => (
+                    <div key={match.id} className="flex items-center justify-between p-3 panel-deep">
+                      <div>
+                        <div className="font-semibold text-sm text-[#0D0D0D]">{match.idMatch} — {match.sport}</div>
+                        <div className="text-xs text-gray-500">{match.equipeA} vs {match.equipeB}</div>
                       </div>
-                    ))}
-                  </div>
+                      <div className="text-right">
+                        <div className="font-black text-[#0D0D0D]">{match.heureDebut}</div>
+                        <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 border border-gray-200 font-bold uppercase mt-1 inline-block">
+                          {match.statut}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
-              <div className="panel-raised rounded-lg">
-                <div className="p-6 panel-deep rounded-t-lg">
-                  <h2 className="text-xl font-bold flex items-center gap-2">
-                    <AlertCircle className="w-5 h-5 text-red-600" />
+              <div className="panel-raised">
+                <div className="p-5 panel-deep border-b border-gray-100">
+                  <h2 className="text-sm font-black uppercase tracking-widest text-[#0D0D0D] flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-[#DC2626]" />
                     Alertes & Actions
                   </h2>
                 </div>
-                <div className="p-6">
-                  <div className="space-y-3">
-                    <div className="p-3 bg-red-50 border-l-4 border-red-500 rounded">
-                      <div className="font-semibold text-red-900">🔴 Paiements en attente</div>
-                      <div className="text-sm text-red-700 mt-1">
-                        {iutList.filter((i) => !i.budgetPaye).map((i) => i.nom).join(', ') || 'Aucun'}
-                      </div>
+                <div className="p-4 space-y-2">
+                  <div className="p-3 border-l-4 border-[#DC2626] bg-red-50">
+                    <div className="font-bold text-sm text-[#0D0D0D]">Paiements en attente</div>
+                    <div className="text-xs text-gray-600 mt-1">
+                      {iutList.filter((i) => !i.budgetPaye).map((i) => i.nom).join(', ') || 'Aucun'}
                     </div>
-                    <div className="p-3 bg-yellow-50 border-l-4 border-yellow-500 rounded">
-                      <div className="font-semibold text-yellow-900">⚠️ Licences non validées</div>
-                      <div className="text-sm text-yellow-700 mt-1">
-                        {participantsSansLicence.length} participant(s) à vérifier
-                      </div>
+                  </div>
+                  <div className="p-3 border-l-4 border-[#FFEF3F] bg-[#FFEF3F]/10">
+                    <div className="font-bold text-sm text-[#0D0D0D]">Licences non validées</div>
+                    <div className="text-xs text-gray-600 mt-1">
+                      {participantsSansLicence.length} participant(s) à vérifier
                     </div>
-                    <div className="p-3 bg-orange-50 border-l-4 border-orange-500 rounded">
-                      <div className="font-semibold text-orange-900">🚨 Incidents en cours</div>
-                      <div className="text-sm text-orange-700 mt-1">
-                        {incidentsEnCours.length > 0
-                          ? `${incidentsEnCours.length} incident(s) non clôturé(s)`
-                          : 'Aucun incident actif'}
-                      </div>
+                  </div>
+                  <div className="p-3 border-l-4 border-[#DC2626] bg-red-50">
+                    <div className="font-bold text-sm text-[#0D0D0D]">Incidents en cours</div>
+                    <div className="text-xs text-gray-600 mt-1">
+                      {incidentsEnCours.length > 0
+                        ? `${incidentsEnCours.length} incident(s) non clôturé(s)`
+                        : 'Aucun incident actif'}
                     </div>
-                    <div className="p-3 bg-blue-50 border-l-4 border-blue-500 rounded">
-                      <div className="font-semibold text-blue-900">ℹ️ Tâches critiques</div>
-                      <div className="text-sm text-blue-700 mt-1">
-                        {urgentTasks.length > 0 ? urgentTasks.slice(0, 2).map((task) => task.tache).join(' • ') : 'Aucune'}
-                      </div>
+                  </div>
+                  <div className="p-3 border-l-4 border-[#FFEF3F] bg-[#FFEF3F]/10">
+                    <div className="font-bold text-sm text-[#0D0D0D]">Tâches critiques</div>
+                    <div className="text-xs text-gray-600 mt-1">
+                      {urgentTasks.length > 0 ? urgentTasks.slice(0, 2).map((task) => task.tache).join(' · ') : 'Aucune'}
                     </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Graphique Budget */}
-            <div className="panel-raised rounded-lg p-6">
-              <h2 className="text-xl font-bold mb-6">💰 Aperçu Budget</h2>
-              <div className="space-y-3">
+            {/* Aperçu Budget */}
+            <div className="panel-raised p-5">
+              <h2 className="text-sm font-black uppercase tracking-widest text-[#0D0D0D] mb-4">Aperçu Budget</h2>
+              <div className="space-y-2">
                 {budget.slice(0, 8).map((line) => (
                   <div key={line.id} className="flex justify-between items-center border-b border-gray-100 pb-2">
                     <div>
-                      <div className="font-semibold">{line.poste}</div>
-                      <div className="text-xs text-gray-500">{line.categorie} • {line.type}</div>
+                      <div className="font-semibold text-sm text-[#0D0D0D]">{line.poste}</div>
+                      <div className="text-xs text-gray-500">{line.categorie} · {line.type}</div>
                     </div>
                     <div className="text-right">
-                      <div className="font-semibold">{line.montantReel.toLocaleString('fr-FR')}€</div>
-                      <div className="text-xs text-gray-500">prévu {line.montantPrevu.toLocaleString('fr-FR')}€</div>
+                      <div className="font-bold text-sm">{line.montantReel.toLocaleString('fr-FR')}€</div>
+                      <div className="text-xs text-gray-400">prévu {line.montantPrevu.toLocaleString('fr-FR')}€</div>
                     </div>
                   </div>
                 ))}
               </div>
-              <div className="mt-6 pt-6 border-t border-gray-200">
-                <div className="flex justify-between items-center text-lg font-bold">
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <div className="flex justify-between items-center font-black text-[#0D0D0D]">
                   <span>Solde</span>
-                  <span className="text-green-600">
-                    {((overview?.budgetCollecte ?? 0) - budgetDepenses).toLocaleString('fr-FR')}€
-                  </span>
+                  <span>{((overview?.budgetCollecte ?? 0) - budgetDepenses).toLocaleString('fr-FR')}€</span>
                 </div>
               </div>
             </div>
@@ -715,44 +962,55 @@ export default function DashboardAdminPage() {
         )}
 
         {activeTab === 'iut' && (
-          <div className="panel-raised rounded-lg">
-            <div className="p-6 panel-deep rounded-t-lg">
-              <h2 className="text-xl font-bold">🏫 Gestion des IUT</h2>
+          <div className="table-frame">
+            <div className="p-5 panel-deep border-b border-gray-100">
+              <h2 className="text-sm font-black uppercase tracking-widest text-[#0D0D0D]">Gestion des IUT</h2>
             </div>
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+              <table className="min-w-full divide-y divide-gray-100">
+                <thead className="bg-[#0D0D0D]">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">IUT</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Statut</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Participants</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Paiement</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                    <th className="px-6 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">IUT</th>
+                    <th className="px-6 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Statut</th>
+                    <th className="px-6 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Participants</th>
+                    <th className="px-6 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Spectateurs</th>
+                    <th className="px-6 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Transport souhaité</th>
+                    <th className="px-6 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Hébergement requis</th>
+                    <th className="px-6 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Paiement</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-100">
                   {iutList.map((iut) => (
-                    <tr key={iut.id} className="hover:bg-slate-100/80">
-                      <td className="px-6 py-4 whitespace-nowrap font-semibold">{iut.nom}</td>
+                    <tr key={iut.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap font-semibold text-[#0D0D0D]">{iut.nom}</td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
-                          {iut.statutParticipation}
-                        </span>
+                        <select
+                          value={iut.statutParticipation}
+                          onChange={(e) => updateIutField(iut.id, { statutParticipation: e.target.value })}
+                          disabled={iutSaving === iut.id}
+                          className="px-2 py-1 border border-gray-200 text-xs font-bold uppercase bg-white focus:outline-none focus:border-[#FFEF3F]"
+                        >
+                          <option value="En attente">En attente</option>
+                          <option value="Confirmé">Confirmé</option>
+                          <option value="Désisté">Désisté</option>
+                        </select>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">{iut.nombreParticipants}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">{iut.nombreParticipants}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">{iut.nombreSpectateurs}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{iut.transportSouhaite || '—'}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{iut.hebergementRequis || '—'}</td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {iut.budgetPaye ? (
-                          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
-                            ✓ Payé
-                          </span>
-                        ) : (
-                          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">
-                            ⚠ En attente
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-gray-500 text-sm">Synchronisé</span>
+                        <button
+                          onClick={() => updateIutField(iut.id, { budgetPaye: !iut.budgetPaye })}
+                          disabled={iutSaving === iut.id}
+                          className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest transition-colors disabled:opacity-60 ${
+                            iut.budgetPaye
+                              ? 'bg-[#0D0D0D] text-[#FFEF3F]'
+                              : 'bg-red-100 text-red-800 border border-red-200'
+                          }`}
+                        >
+                          {iut.budgetPaye ? '✓ Payé' : 'En attente'}
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -763,36 +1021,61 @@ export default function DashboardAdminPage() {
         )}
 
         {activeTab === 'equipes' && (
-          <div className="space-y-6">
-            <div className="panel-raised rounded-lg p-6 overflow-x-auto">
-              <h2 className="text-xl font-bold mb-4">👥 Equipes</h2>
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+          <div className="space-y-5">
+            <div className="table-frame overflow-x-auto">
+              <div className="p-5 panel-deep border-b border-gray-100">
+                <h2 className="text-sm font-black uppercase tracking-widest text-[#0D0D0D]">Équipes</h2>
+              </div>
+              <table className="min-w-full divide-y divide-gray-100">
+                <thead className="bg-[#0D0D0D]">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Nom</th>
-                    <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">IUT</th>
-                    <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Sports</th>
-                    <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Statut</th>
-                    <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Joueurs</th>
-                    <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Action</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Nom</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">IUT</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Poule</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Candidature</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Joueurs</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {equipes.map((equipe) => {
+                <tbody className="divide-y divide-gray-100">
+                  {[...equipes]
+                    .sort((a, b) => (a.statutValidation === 'En attente' ? -1 : 1) - (b.statutValidation === 'En attente' ? -1 : 1))
+                    .map((equipe) => {
                     const count = participants.filter((p) => participantBelongsToEquipe(p, equipe)).length;
                     return (
-                      <tr key={equipe.id}>
+                      <tr key={equipe.id} className={equipe.statutValidation === 'En attente' ? 'bg-[#FFEF3F]/10' : ''}>
                         <td className="px-4 py-2 font-semibold">{equipe.nom}</td>
                         <td className="px-4 py-2">{equipe.iut}</td>
-                        <td className="px-4 py-2">{equipe.sportsPratiques.join(', ')}</td>
-                        <td className="px-4 py-2">{equipe.statutInscription}</td>
+                        <td className="px-4 py-2">
+                          <select
+                            value={equipe.pouleAssignee || ''}
+                            onChange={(e) => updateEquipePoule(equipe.id, e.target.value)}
+                            disabled={candidatureSaving === equipe.id}
+                            className="px-2 py-1 border border-gray-200 text-sm bg-white focus:outline-none focus:border-[#FFEF3F]"
+                          >
+                            {POULE_OPTIONS.map((poule) => (
+                              <option key={poule || 'none'} value={poule}>{poule || 'Non assignée'}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="px-4 py-2">
+                          <span className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest ${
+                            equipe.statutValidation === 'Validée'
+                              ? 'bg-[#0D0D0D] text-[#FFEF3F]'
+                              : equipe.statutValidation === 'Refusée'
+                              ? 'bg-red-100 text-red-800 border border-red-200'
+                              : 'bg-gray-100 text-gray-700 border border-gray-200'
+                          }`}>
+                            {equipe.statutValidation}
+                          </span>
+                        </td>
                         <td className="px-4 py-2">{count}/10</td>
                         <td className="px-4 py-2">
                           <button
                             onClick={() => setSelectedEquipeId(equipe.id)}
-                            className="text-lorraine-blue font-semibold hover:text-blue-700"
+                            className="text-[#0D0D0D] font-semibold hover:text-[#FFEF3F]"
                           >
-                            Gérer joueurs
+                            Gérer / Valider
                           </button>
                         </td>
                       </tr>
@@ -803,64 +1086,125 @@ export default function DashboardAdminPage() {
             </div>
 
             {selectedEquipe && (
-              <div className="panel-raised rounded-lg p-6">
-                <h3 className="text-lg font-bold mb-1">Joueurs - {selectedEquipe.nom}</h3>
-                <p className="text-sm text-gray-600 mb-4">{joueursDeLEquipe.length}/10 joueurs affectés</p>
+              <div className="panel-raised p-5">
+                <h3 className="text-sm font-black uppercase tracking-widest text-[#0D0D0D] mb-1">Joueurs — {selectedEquipe.nom}</h3>
+                <p className="text-xs text-gray-400 mb-4">{joueursDeLEquipe.length}/10 joueurs affectés</p>
+
+                <div className="mb-5 border border-gray-200 p-4">
+                  <h4 className="text-xs font-black uppercase tracking-widest text-[#0D0D0D] mb-3">Candidature</h4>
+
+                  <label className="flex items-center gap-3 cursor-pointer mb-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedEquipe.documentsValides}
+                      onChange={(e) => toggleDocumentsValides(selectedEquipe.id, selectedEquipe.statutValidation, e.target.checked)}
+                      disabled={candidatureSaving === selectedEquipe.id}
+                      className="w-4 h-4 accent-[#0D0D0D]"
+                    />
+                    <span className="text-sm text-gray-700">Documents reçus et vérifiés</span>
+                  </label>
+
+                  {selectedEquipe.statutValidation === 'Refusée' && selectedEquipe.motifRefus && (
+                    <p className="text-xs text-red-700 bg-red-50 border border-red-200 px-3 py-2 mb-3">
+                      Motif de refus : {selectedEquipe.motifRefus}
+                    </p>
+                  )}
+
+                  {selectedEquipe.statutValidation !== 'Validée' && (
+                    <div className="mb-3">
+                      <label className="label">Motif de refus (requis pour refuser)</label>
+                      <textarea
+                        value={motifRefusDraft[selectedEquipe.id] || ''}
+                        onChange={(e) => setMotifRefusDraft((prev) => ({ ...prev, [selectedEquipe.id]: e.target.value }))}
+                        rows={2}
+                        placeholder="Documents manquants, équipe incomplète…"
+                        className="input resize-none"
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex gap-3">
+                    {selectedEquipe.statutValidation !== 'Validée' && (
+                      <button
+                        onClick={() => updateEquipeCandidature(selectedEquipe.id, 'Validée', selectedEquipe.documentsValides)}
+                        disabled={candidatureSaving === selectedEquipe.id}
+                        className="btn-primary disabled:opacity-60"
+                      >
+                        Valider la candidature
+                      </button>
+                    )}
+                    {selectedEquipe.statutValidation !== 'Refusée' && (
+                      <button
+                        onClick={() => updateEquipeCandidature(selectedEquipe.id, 'Refusée', selectedEquipe.documentsValides)}
+                        disabled={candidatureSaving === selectedEquipe.id}
+                        className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 text-sm font-bold uppercase disabled:opacity-60 transition-colors"
+                      >
+                        Refuser
+                      </button>
+                    )}
+                  </div>
+                </div>
 
                 <div className="mb-5">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Ajouter un joueur (autocomplete)</label>
+                  <label className="label">Ajouter un joueur</label>
                   <input
                     type="text"
                     value={playerSearch}
                     onChange={(e) => setPlayerSearch(e.target.value)}
-                    placeholder="Rechercher un joueur par nom ou IUT..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                    placeholder="Rechercher par nom ou IUT…"
+                    className="input"
                   />
                   {playerSearch && (
-                    <div className="mt-2 max-h-44 overflow-y-auto border border-gray-200 rounded-lg">
+                    <div className="mt-2 max-h-44 overflow-y-auto border border-gray-200">
                       {joueursDisponibles.slice(0, 12).map((joueur) => (
-                        <div key={joueur.id} className="flex items-center justify-between px-3 py-2 border-b border-gray-100 last:border-b-0">
+                        <div key={joueur.id} className="flex items-center justify-between px-3 py-2 border-b border-gray-100 last:border-b-0 hover:bg-gray-50">
                           <div>
-                            <div className="font-medium">{joueur.nomComplet}</div>
+                            <div className="font-semibold text-sm text-[#0D0D0D]">{joueur.nomComplet}</div>
                             <div className="text-xs text-gray-500">{joueur.iut}</div>
                           </div>
                           <button
                             onClick={() => updateRoster(joueur.id, selectedEquipe.id, 'add')}
                             disabled={rosterSaving === joueur.id || joueursDeLEquipe.length >= 10}
-                            className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm disabled:opacity-60"
+                            className="bg-[#0D0D0D] hover:bg-[#222] text-white px-3 py-1 text-xs font-bold uppercase disabled:opacity-60 transition-colors"
                           >
                             Ajouter
                           </button>
                         </div>
                       ))}
                       {joueursDisponibles.length === 0 && (
-                        <div className="px-3 py-2 text-sm text-gray-500">Aucun joueur correspondant.</div>
+                        <div className="px-3 py-2 text-sm text-gray-400">Aucun joueur correspondant.</div>
                       )}
                     </div>
                   )}
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
+                  <table className="min-w-full divide-y divide-gray-100">
+                    <thead className="bg-[#0D0D0D]">
                       <tr>
-                        <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Nom</th>
-                        <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">IUT</th>
-                        <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Licence</th>
-                        <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Action</th>
+                        <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Nom</th>
+                        <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">IUT</th>
+                        <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Licence</th>
+                        <th className="px-4 py-2.5 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Action</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-200">
+                    <tbody className="divide-y divide-gray-100">
                       {joueursDeLEquipe.map((joueur) => (
-                        <tr key={joueur.id}>
-                          <td className="px-4 py-2 font-semibold">{joueur.nomComplet}</td>
-                          <td className="px-4 py-2">{joueur.iut}</td>
-                          <td className="px-4 py-2">{joueur.licenceValidee ? 'Validée' : 'À valider'}</td>
-                          <td className="px-4 py-2">
+                        <tr key={joueur.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 font-semibold text-sm text-[#0D0D0D]">{joueur.nomComplet}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{joueur.iut}</td>
+                          <td className="px-4 py-3">
+                            {joueur.licenceValidee ? (
+                              <span className="bg-[#0D0D0D] text-[#FFEF3F] px-2 py-0.5 text-[10px] font-bold uppercase">Validée</span>
+                            ) : (
+                              <span className="bg-red-100 text-red-800 border border-red-200 px-2 py-0.5 text-[10px] font-bold uppercase">À valider</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
                             <button
                               onClick={() => updateRoster(joueur.id, selectedEquipe.id, 'remove')}
                               disabled={rosterSaving === joueur.id}
-                              className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm disabled:opacity-60"
+                              className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 text-xs font-bold uppercase disabled:opacity-60 transition-colors"
                             >
                               Retirer
                             </button>
@@ -877,7 +1221,74 @@ export default function DashboardAdminPage() {
 
         {activeTab === 'matchs' && (
           <div className="space-y-5">
-            <div className="panel-raised rounded-lg p-5">
+            <div className="panel-raised p-5">
+              <h2 className="text-sm font-black uppercase tracking-widest text-[#0D0D0D] mb-4">Créer un match</h2>
+              <div className="grid md:grid-cols-4 gap-3">
+                <input
+                  type="text"
+                  value={newMatch.idMatch}
+                  onChange={(e) => setNewMatch((prev) => ({ ...prev, idMatch: e.target.value }))}
+                  placeholder="ID (optionnel)"
+                  className="input"
+                />
+                <input
+                  type="text"
+                  value={newMatch.sport}
+                  onChange={(e) => setNewMatch((prev) => ({ ...prev, sport: e.target.value }))}
+                  placeholder="Sport *"
+                  className="input"
+                />
+                <input
+                  type="text"
+                  value={newMatch.phase}
+                  onChange={(e) => setNewMatch((prev) => ({ ...prev, phase: e.target.value }))}
+                  placeholder="Phase (ex: Poule A) *"
+                  className="input"
+                />
+                <input
+                  type="text"
+                  value={newMatch.terrain}
+                  onChange={(e) => setNewMatch((prev) => ({ ...prev, terrain: e.target.value }))}
+                  placeholder="Terrain *"
+                  className="input"
+                />
+                <input
+                  type="date"
+                  value={newMatch.date}
+                  onChange={(e) => setNewMatch((prev) => ({ ...prev, date: e.target.value }))}
+                  className="input"
+                />
+                <input
+                  type="time"
+                  value={newMatch.heureDebut}
+                  onChange={(e) => setNewMatch((prev) => ({ ...prev, heureDebut: e.target.value }))}
+                  className="input"
+                />
+                <input
+                  type="text"
+                  value={newMatch.equipeA}
+                  onChange={(e) => setNewMatch((prev) => ({ ...prev, equipeA: e.target.value }))}
+                  placeholder="Équipe A"
+                  className="input"
+                />
+                <input
+                  type="text"
+                  value={newMatch.equipeB}
+                  onChange={(e) => setNewMatch((prev) => ({ ...prev, equipeB: e.target.value }))}
+                  placeholder="Équipe B"
+                  className="input"
+                />
+              </div>
+              <button
+                onClick={createMatchHandler}
+                disabled={creatingMatch}
+                className="btn-primary mt-3 disabled:opacity-60"
+              >
+                {creatingMatch ? 'Création…' : '+ Créer le match'}
+              </button>
+            </div>
+
+            <div className="panel-raised p-5">
               <div className="flex flex-col md:flex-row md:items-end gap-3">
                 <div className="flex-1">
                   <label className="label">Recherche</label>
@@ -908,7 +1319,7 @@ export default function DashboardAdminPage() {
                   </select>
                 </div>
               </div>
-              <p className="mt-3 text-sm text-slate-600">{matchsFiltres.length} match(s) affiché(s)</p>
+              <p className="mt-3 text-sm text-gray-600">{matchsFiltres.length} match(s) affiché(s)</p>
             </div>
 
             <div className="space-y-3">
@@ -920,16 +1331,16 @@ export default function DashboardAdminPage() {
                 };
 
                 return (
-                  <div key={match.id} className="section-split rounded-lg p-4 md:p-5">
+                  <div key={match.id} className="section-split p-4 md:p-5">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
                       <div>
-                        <p className="text-xs uppercase tracking-wide text-slate-500">{match.idMatch || match.id}</p>
-                        <h3 className="text-lg font-semibold text-slate-800">{match.sport} • {match.date} • {match.heureDebut}</h3>
-                        <p className="text-sm text-slate-600 mt-1">{match.equipeA} vs {match.equipeB}</p>
+                        <p className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">{match.idMatch || match.id}</p>
+                        <h3 className="text-base font-black text-[#0D0D0D]">{match.sport} · {match.date} · {match.heureDebut}</h3>
+                        <p className="text-sm text-gray-600 mt-0.5">{match.equipeA} vs {match.equipeB}</p>
                       </div>
-                      <div className="text-sm font-semibold px-3 py-1 rounded-full bg-slate-200 text-slate-700 w-fit">
+                      <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 bg-gray-100 text-gray-700 border border-gray-200 w-fit">
                         {match.statut}
-                      </div>
+                      </span>
                     </div>
 
                     <div className="grid md:grid-cols-4 gap-3">
@@ -983,54 +1394,63 @@ export default function DashboardAdminPage() {
               })}
 
               {matchsFiltres.length === 0 && (
-                <div className="panel-raised rounded-lg p-6 text-center text-slate-500">Aucun match ne correspond aux filtres.</div>
+                <div className="panel-raised p-6 text-center text-gray-400 text-sm">Aucun match ne correspond aux filtres.</div>
               )}
             </div>
           </div>
         )}
 
         {activeTab === 'incidents' && (
-          <div className="panel-raised rounded-lg p-6 overflow-x-auto">
-            <h2 className="text-xl font-bold mb-4">🚨 Incidents</h2>
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+          <div className="table-frame overflow-x-auto">
+            <div className="p-5 panel-deep border-b border-gray-100">
+              <h2 className="text-sm font-black uppercase tracking-widest text-[#0D0D0D]">Incidents</h2>
+            </div>
+            <table className="min-w-full divide-y divide-gray-100">
+              <thead className="bg-[#0D0D0D]">
                 <tr>
-                  <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Type</th>
-                  <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Gravité</th>
-                  <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Lieu</th>
-                  <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Description</th>
-                  <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Statut</th>
-                  <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Action</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Type</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Gravité</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Lieu</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Description</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Concerné / Contact</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Statut</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-gray-100">
                 {incidents.map((incident) => (
-                  <tr key={incident.id}>
-                    <td className="px-4 py-2">{incident.typeUrgence}</td>
-                    <td className="px-4 py-2">{incident.gravite}</td>
-                    <td className="px-4 py-2">{incident.lieu}</td>
-                    <td className="px-4 py-2 text-sm text-gray-700 max-w-sm">{incident.description}</td>
-                    <td className="px-4 py-2">{incident.statut}</td>
-                    <td className="px-4 py-2">
-                      <div className="flex gap-2">
+                  <tr key={incident.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-sm font-semibold text-[#0D0D0D]">{incident.typeUrgence}</td>
+                    <td className="px-4 py-3 text-sm">{incident.gravite}</td>
+                    <td className="px-4 py-3 text-sm">{incident.lieu}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600 max-w-sm">{incident.description}</td>
+                    <td className="px-4 py-3 text-xs text-gray-600">
+                      <div>{incident.personneConcernee || '—'}</div>
+                      <div className="text-gray-400">{incident.contactSignalant || '—'}</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-[10px] bg-gray-100 text-gray-700 px-2 py-0.5 font-bold uppercase border border-gray-200">{incident.statut}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-1 flex-wrap">
                         <button
                           onClick={() => updateIncidentStatus(incident.id, 'En traitement')}
                           disabled={incidentSaving === incident.id}
-                          className="bg-amber-500 hover:bg-amber-600 text-white px-2 py-1 rounded text-xs"
+                          className="bg-[#FFEF3F] hover:bg-[#e6d400] text-[#0D0D0D] px-2 py-1 text-xs font-bold uppercase transition-colors disabled:opacity-60"
                         >
                           En traitement
                         </button>
                         <button
                           onClick={() => updateIncidentStatus(incident.id, 'Résolu')}
                           disabled={incidentSaving === incident.id}
-                          className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs"
+                          className="bg-[#0D0D0D] hover:bg-[#222] text-white px-2 py-1 text-xs font-bold uppercase transition-colors disabled:opacity-60"
                         >
                           Résolu
                         </button>
                         <button
                           onClick={() => updateIncidentStatus(incident.id, 'Clôturé')}
                           disabled={incidentSaving === incident.id}
-                          className="bg-gray-700 hover:bg-gray-800 text-white px-2 py-1 rounded text-xs"
+                          className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-2 py-1 text-xs font-bold uppercase transition-colors disabled:opacity-60"
                         >
                           Clôturé
                         </button>
@@ -1044,32 +1464,40 @@ export default function DashboardAdminPage() {
         )}
 
         {activeTab === 'participants' && (
-          <div className="panel-raised rounded-lg p-6 overflow-x-auto">
-            <h2 className="text-xl font-bold mb-4">🧑 Participants</h2>
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+          <div className="table-frame overflow-x-auto">
+            <div className="p-5 panel-deep border-b border-gray-100">
+              <h2 className="text-sm font-black uppercase tracking-widest text-[#0D0D0D]">Participants</h2>
+              <p className="text-xs text-gray-400 mt-1">Lorsqu'un participant passe en Bénévole, un mot de passe est généré automatiquement et affiché une seule fois.</p>
+            </div>
+            <table className="min-w-full divide-y divide-gray-100">
+              <thead className="bg-[#0D0D0D]">
                 <tr>
-                  <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Nom</th>
-                  <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Email</th>
-                  <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">IUT</th>
-                  <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Type</th>
-                  <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Équipe</th>
-                  <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Licence</th>
-                  <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Arrivee</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Nom</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Email</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">IUT</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Type</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Équipe</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Licence</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Allergies</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Maillot</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Transport</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Hébergement</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Arrivée</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Départ</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-gray-100">
                 {participants.slice(0, 120).map((participant) => (
-                  <tr key={participant.id}>
-                    <td className="px-4 py-2 font-semibold">{participant.nomComplet}</td>
-                    <td className="px-4 py-2 text-sm text-gray-700">{participant.email || 'Email manquant'}</td>
-                    <td className="px-4 py-2">{participant.iut}</td>
-                    <td className="px-4 py-2">
+                  <tr key={participant.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-semibold text-sm text-[#0D0D0D]">{participant.nomComplet}</td>
+                    <td className="px-4 py-3 text-xs text-gray-500">{participant.email || '—'}</td>
+                    <td className="px-4 py-3 text-sm">{participant.iut}</td>
+                    <td className="px-4 py-3">
                       <select
                         value={participant.type}
                         onChange={(e) => updateParticipantRole(participant.id, e.target.value as 'Joueur' | 'Spectateur' | 'Bénévole' | 'Staff', participant.email)}
                         disabled={participantSaving === participant.id}
-                        className="px-2 py-1 border border-gray-300 rounded text-sm"
+                        className="px-2 py-1 border border-gray-200 text-sm bg-white focus:outline-none focus:border-[#FFEF3F]"
                       >
                         <option value="Joueur">Joueur</option>
                         <option value="Spectateur">Spectateur</option>
@@ -1077,76 +1505,202 @@ export default function DashboardAdminPage() {
                         <option value="Staff">Staff</option>
                       </select>
                     </td>
-                    <td className="px-4 py-2">
+                    <td className="px-4 py-3">
                       <select
                         value={participant.equipeIds?.[0] || ''}
                         onChange={(e) => updateParticipantTeam(participant.id, e.target.value)}
                         disabled={participantSaving === participant.id}
-                        className="px-2 py-1 border border-gray-300 rounded text-sm min-w-44"
+                        className="px-2 py-1 border border-gray-200 text-sm min-w-44 bg-white focus:outline-none focus:border-[#FFEF3F]"
                       >
                         <option value="">Aucune équipe</option>
                         {equipes.map((equipe) => (
                           <option key={equipe.id} value={equipe.id}>{equipe.nom}</option>
                         ))}
                       </select>
-                      {participant.equipeIds?.[0] && (
-                        <div className="text-xs text-gray-500 mt-1">
-                          {equipeById[participant.equipeIds[0]]?.nom || participant.equipeIds[0]}
-                        </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {participant.licenceValidee ? (
+                        <span className="bg-[#0D0D0D] text-[#FFEF3F] px-2 py-0.5 text-[10px] font-bold uppercase">OK</span>
+                      ) : (
+                        <span className="bg-red-100 text-red-800 border border-red-200 px-2 py-0.5 text-[10px] font-bold uppercase">À vérifier</span>
                       )}
                     </td>
-                    <td className="px-4 py-2">{participant.licenceValidee ? 'OK' : 'A verifier'}</td>
-                    <td className="px-4 py-2">{participant.arriveeConfirmee ? 'Arrive' : 'Non'}</td>
+                    <td className="px-4 py-3 text-xs text-gray-600 max-w-[12rem]">{participant.allergiesAlimentaires || '—'}</td>
+                    <td className="px-4 py-3 text-xs text-gray-600">{participant.tailleMaillot || '—'}</td>
+                    <td className="px-4 py-3 text-xs text-gray-600">{participant.transport || '—'}</td>
+                    <td className="px-4 py-3 text-xs text-gray-600">{participant.hebergement ? 'Oui' : 'Non'}</td>
+                    <td className="px-4 py-3">
+                      {participant.arriveeConfirmee ? (
+                        <span className="bg-[#0D0D0D] text-white px-2 py-0.5 text-[10px] font-bold uppercase">Arrivé</span>
+                      ) : (
+                        <span className="text-gray-400 text-xs">Non</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {participant.departConfirme ? (
+                        <span className="bg-[#0D0D0D] text-white px-2 py-0.5 text-[10px] font-bold uppercase">Parti</span>
+                      ) : (
+                        <span className="text-gray-400 text-xs">Non</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <p className="text-xs text-gray-500 mt-3">
-              Lorsqu'un participant passe en rôle Bénévole, son accès bénévole est créé automatiquement via son email (mot de passe par défaut: Benevole2027!).
-            </p>
+          </div>
+        )}
+
+        {activeTab === 'taches' && (
+          <div className="space-y-5">
+            <div className="panel-raised p-5">
+              <h2 className="text-sm font-black uppercase tracking-widest text-[#0D0D0D] mb-4">Créer une tâche</h2>
+              <div className="grid md:grid-cols-2 gap-3">
+                <input
+                  type="text"
+                  value={newTache.tache}
+                  onChange={(e) => setNewTache((prev) => ({ ...prev, tache: e.target.value }))}
+                  placeholder="Tâche *"
+                  className="input"
+                />
+                <input
+                  type="text"
+                  value={newTache.responsable}
+                  onChange={(e) => setNewTache((prev) => ({ ...prev, responsable: e.target.value }))}
+                  placeholder="Responsable *"
+                  list="benevoles-connus"
+                  className="input"
+                />
+                <datalist id="benevoles-connus">
+                  {participants.filter((p) => p.type === 'Bénévole').map((p) => (
+                    <option key={p.id} value={p.nomComplet} />
+                  ))}
+                </datalist>
+                <select
+                  value={newTache.priorite}
+                  onChange={(e) => setNewTache((prev) => ({ ...prev, priorite: e.target.value }))}
+                  className="input"
+                >
+                  {TACHE_PRIORITES.map((p) => <option key={p} value={p}>{p}</option>)}
+                </select>
+                <select
+                  value={newTache.categorie}
+                  onChange={(e) => setNewTache((prev) => ({ ...prev, categorie: e.target.value }))}
+                  className="input"
+                >
+                  {TACHE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <input
+                  type="date"
+                  value={newTache.deadline}
+                  onChange={(e) => setNewTache((prev) => ({ ...prev, deadline: e.target.value }))}
+                  className="input"
+                />
+                <input
+                  type="text"
+                  value={newTache.description}
+                  onChange={(e) => setNewTache((prev) => ({ ...prev, description: e.target.value }))}
+                  placeholder="Description (optionnel)"
+                  className="md:col-span-2 input"
+                />
+              </div>
+              <button
+                onClick={createTacheHandler}
+                disabled={creatingTache}
+                className="btn-primary mt-3 disabled:opacity-60"
+              >
+                {creatingTache ? 'Création…' : '+ Créer la tâche'}
+              </button>
+            </div>
+
+            <div className="table-frame overflow-x-auto">
+              <div className="p-5 panel-deep border-b border-gray-100">
+                <h2 className="text-sm font-black uppercase tracking-widest text-[#0D0D0D]">Toutes les tâches ({taches.length})</h2>
+              </div>
+              <table className="min-w-full divide-y divide-gray-100">
+                <thead className="bg-[#0D0D0D]">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Tâche</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Responsable</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Priorité</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Deadline</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Catégorie</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Statut</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {taches.map((tache) => (
+                    <tr key={tache.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 font-semibold text-sm text-[#0D0D0D]">{tache.tache}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{tache.responsable}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{tache.priorite}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{tache.deadline || '—'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{tache.categorie}</td>
+                      <td className="px-4 py-3">
+                        <select
+                          value={tache.statut}
+                          onChange={(e) => updateTacheStatutHandler(tache.id, e.target.value)}
+                          disabled={tacheSaving === tache.id}
+                          className="px-2 py-1 border border-gray-200 text-xs font-bold uppercase bg-white focus:outline-none focus:border-[#FFEF3F]"
+                        >
+                          <option value="À faire">À faire</option>
+                          <option value="En cours">En cours</option>
+                          <option value="Terminé">Terminé</option>
+                          <option value="En attente">En attente</option>
+                        </select>
+                      </td>
+                    </tr>
+                  ))}
+                  {taches.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-400">Aucune tâche pour le moment.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
         {activeTab === 'budget' && (
-          <div className="space-y-6">
+          <div className="space-y-5">
             <div className="grid md:grid-cols-3 gap-4">
-              <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 border border-emerald-200 rounded-xl p-4">
-                <div className="text-sm text-emerald-700 font-medium">Vue d'ensemble - Revenus</div>
-                <div className="text-2xl font-bold text-emerald-800 mt-1">{budgetRevenus.toLocaleString('fr-FR')}€</div>
+              <div className="stat-card border-l-4 border-white/20">
+                <p className="text-[10px] uppercase tracking-widest font-bold text-gray-400">Revenus</p>
+                <p className="text-2xl font-black text-white mt-1">{budgetRevenus.toLocaleString('fr-FR')}€</p>
               </div>
-              <div className="bg-gradient-to-br from-rose-50 to-rose-100 border border-rose-200 rounded-xl p-4">
-                <div className="text-sm text-rose-700 font-medium">Vue d'ensemble - Dépenses</div>
-                <div className="text-2xl font-bold text-rose-800 mt-1">{budgetDepenses.toLocaleString('fr-FR')}€</div>
+              <div className="stat-card border-l-4 border-[#DC2626]">
+                <p className="text-[10px] uppercase tracking-widest font-bold text-gray-400">Dépenses</p>
+                <p className="text-2xl font-black text-white mt-1">{budgetDepenses.toLocaleString('fr-FR')}€</p>
               </div>
-              <div className="bg-gradient-to-br from-sky-50 to-sky-100 border border-sky-200 rounded-xl p-4">
-                <div className="text-sm text-sky-700 font-medium">Solde connecté</div>
-                <div className="text-2xl font-bold text-sky-800 mt-1">{((overview?.budgetCollecte ?? 0) - budgetDepenses).toLocaleString('fr-FR')}€</div>
+              <div className="stat-card border-l-4 border-[#FFEF3F]">
+                <p className="text-[10px] uppercase tracking-widest font-bold text-gray-400">Solde</p>
+                <p className="text-2xl font-black text-white mt-1">{((overview?.budgetCollecte ?? 0) - budgetDepenses).toLocaleString('fr-FR')}€</p>
               </div>
             </div>
 
-            <div className="panel-raised rounded-xl p-5">
-              <h2 className="text-xl font-bold mb-4">💰 Ajouter une ligne budget</h2>
+            <div className="panel-raised p-5">
+              <h2 className="text-sm font-black uppercase tracking-widest text-[#0D0D0D] mb-4">Ajouter une ligne budget</h2>
               <div className="grid md:grid-cols-6 gap-3">
                 <input
                   type="text"
                   value={newBudgetLine.poste}
                   onChange={(e) => setNewBudgetLine((prev) => ({ ...prev, poste: e.target.value }))}
                   placeholder="Poste"
-                  className="md:col-span-2 px-3 py-2 border border-gray-300 rounded-lg"
+                  className="md:col-span-2 input"
                 />
                 <select
                   value={newBudgetLine.categorie}
                   onChange={(e) => setNewBudgetLine((prev) => ({ ...prev, categorie: e.target.value }))}
-                  className="px-3 py-2 border border-gray-300 rounded-lg"
+                  className="input"
                 >
-                  {['Logistique', 'Sport', 'Communication', 'Restauration', 'Hébergement', 'Transport', 'Autre'].map((cat) => (
+                  {BUDGET_CATEGORIES.map((cat) => (
                     <option key={cat} value={cat}>{cat}</option>
                   ))}
                 </select>
                 <select
                   value={newBudgetLine.type}
                   onChange={(e) => setNewBudgetLine((prev) => ({ ...prev, type: e.target.value }))}
-                  className="px-3 py-2 border border-gray-300 rounded-lg"
+                  className="input"
                 >
                   <option value="Dépense">Dépense</option>
                   <option value="Revenu">Revenu</option>
@@ -1156,21 +1710,21 @@ export default function DashboardAdminPage() {
                   value={newBudgetLine.montantPrevu}
                   onChange={(e) => setNewBudgetLine((prev) => ({ ...prev, montantPrevu: Number(e.target.value || 0) }))}
                   placeholder="Prévu"
-                  className="px-3 py-2 border border-gray-300 rounded-lg"
+                  className="input"
                 />
                 <input
                   type="number"
                   value={newBudgetLine.montantReel}
                   onChange={(e) => setNewBudgetLine((prev) => ({ ...prev, montantReel: Number(e.target.value || 0) }))}
                   placeholder="Réel"
-                  className="px-3 py-2 border border-gray-300 rounded-lg"
+                  className="input"
                 />
               </div>
-              <div className="mt-3 flex items-center justify-between">
+              <div className="mt-3 flex items-center gap-3">
                 <select
                   value={newBudgetLine.statutPaiement}
                   onChange={(e) => setNewBudgetLine((prev) => ({ ...prev, statutPaiement: e.target.value }))}
-                  className="px-3 py-2 border border-gray-300 rounded-lg"
+                  className="input w-auto"
                 >
                   <option value="En attente">En attente</option>
                   <option value="Payé">Payé</option>
@@ -1179,93 +1733,95 @@ export default function DashboardAdminPage() {
                 <button
                   onClick={createBudgetLine}
                   disabled={creatingBudgetLine}
-                  className="bg-lorraine-blue hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold disabled:opacity-60"
+                  className="btn-primary disabled:opacity-60"
                 >
-                  {creatingBudgetLine ? 'Ajout...' : '+ Ajouter la ligne'}
+                  {creatingBudgetLine ? 'Ajout…' : '+ Ajouter'}
                 </button>
               </div>
             </div>
 
-            <div className="panel-raised rounded-xl p-5 overflow-x-auto">
-              <h3 className="text-lg font-bold mb-3">Tableau budget (édition directe)</h3>
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+            <div className="table-frame overflow-x-auto">
+              <div className="p-5 panel-deep border-b border-gray-100">
+                <h3 className="text-sm font-black uppercase tracking-widest text-[#0D0D0D]">Tableau budget (édition directe)</h3>
+              </div>
+              <table className="min-w-full divide-y divide-gray-100">
+                <thead className="bg-[#0D0D0D]">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Poste</th>
-                    <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Categorie</th>
-                    <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Type</th>
-                    <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Prevu</th>
-                    <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Reel</th>
-                    <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Statut paiement</th>
-                    <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Action</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Poste</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Catégorie</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Type</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Prévu</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Réel</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Statut</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-100">
                   {budget.map((line) => (
                     <tr key={line.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-2">
+                      <td className="px-4 py-2.5">
                         <input
                           type="text"
                           value={(budgetEdits[line.id]?.poste ?? line.poste)}
                           onChange={(e) => handleBudgetFieldChange(line.id, 'poste', e.target.value)}
-                          className="w-44 px-2 py-1 border border-gray-300 rounded"
+                          className="w-44 px-2 py-1 border border-gray-200 text-sm focus:outline-none focus:border-[#FFEF3F]"
                         />
                       </td>
-                      <td className="px-4 py-2">
+                      <td className="px-4 py-2.5">
                         <select
                           value={(budgetEdits[line.id]?.categorie ?? line.categorie)}
                           onChange={(e) => handleBudgetFieldChange(line.id, 'categorie', e.target.value)}
-                          className="w-36 px-2 py-1 border border-gray-300 rounded"
+                          className="w-36 px-2 py-1 border border-gray-200 text-sm focus:outline-none focus:border-[#FFEF3F]"
                         >
-                          {['Logistique', 'Sport', 'Communication', 'Restauration', 'Hébergement', 'Transport', 'Autre'].map((cat) => (
+                          {BUDGET_CATEGORIES.map((cat) => (
                             <option key={cat} value={cat}>{cat}</option>
                           ))}
                         </select>
                       </td>
-                      <td className="px-4 py-2">
+                      <td className="px-4 py-2.5">
                         <select
                           value={(budgetEdits[line.id]?.type ?? line.type)}
                           onChange={(e) => handleBudgetFieldChange(line.id, 'type', e.target.value)}
-                          className="w-28 px-2 py-1 border border-gray-300 rounded"
+                          className="w-28 px-2 py-1 border border-gray-200 text-sm focus:outline-none focus:border-[#FFEF3F]"
                         >
                           <option value="Dépense">Dépense</option>
                           <option value="Revenu">Revenu</option>
                         </select>
                       </td>
-                      <td className="px-4 py-2">
+                      <td className="px-4 py-2.5">
                         <input
                           type="number"
                           value={(budgetEdits[line.id]?.montantPrevu ?? line.montantPrevu)}
                           onChange={(e) => handleBudgetFieldChange(line.id, 'montantPrevu', e.target.value)}
-                          className="w-28 px-2 py-1 border border-gray-300 rounded"
+                          className="w-28 px-2 py-1 border border-gray-200 text-sm focus:outline-none focus:border-[#FFEF3F]"
                         />
                       </td>
-                      <td className="px-4 py-2">
+                      <td className="px-4 py-2.5">
                         <input
                           type="number"
                           value={(budgetEdits[line.id]?.montantReel ?? line.montantReel)}
                           onChange={(e) => handleBudgetFieldChange(line.id, 'montantReel', e.target.value)}
-                          className="w-28 px-2 py-1 border border-gray-300 rounded"
+                          className="w-28 px-2 py-1 border border-gray-200 text-sm focus:outline-none focus:border-[#FFEF3F]"
                         />
                       </td>
-                      <td className="px-4 py-2">
+                      <td className="px-4 py-2.5">
                         <select
                           value={(budgetEdits[line.id]?.statutPaiement ?? line.statutPaiement)}
                           onChange={(e) => handleBudgetFieldChange(line.id, 'statutPaiement', e.target.value)}
-                          className="w-36 px-2 py-1 border border-gray-300 rounded"
+                          className="w-32 px-2 py-1 border border-gray-200 text-sm focus:outline-none focus:border-[#FFEF3F]"
                         >
                           <option value="En attente">En attente</option>
                           <option value="Payé">Payé</option>
                           <option value="Partiel">Partiel</option>
                         </select>
                       </td>
-                      <td className="px-4 py-2">
+                      <td className="px-4 py-2.5">
                         <button
                           onClick={() => saveBudgetLine(line.id)}
                           disabled={budgetSaving === line.id}
-                          className="bg-lorraine-blue hover:bg-blue-700 text-white px-3 py-1 rounded text-sm font-semibold disabled:opacity-60"
+                          className="bg-[#0D0D0D] hover:bg-[#222] text-white px-3 py-1 text-xs font-bold uppercase disabled:opacity-60 transition-colors"
                         >
-                          {budgetSaving === line.id ? 'Sauvegarde...' : 'Sauvegarder'}
+                          {budgetSaving === line.id ? 'Sauvegarde…' : 'Sauvegarder'}
                         </button>
                       </td>
                     </tr>
@@ -1277,52 +1833,54 @@ export default function DashboardAdminPage() {
         )}
 
         {activeTab === 'devis' && (
-          <div className="space-y-6">
+          <div className="space-y-5">
             <div className="grid md:grid-cols-3 gap-4">
-              <div className="panel-raised rounded-xl p-4 border-l-4 border-slate-500">
-                <div className="text-sm text-slate-700 font-medium">Total devis</div>
-                <div className="text-2xl font-bold text-slate-800 mt-1">{devis.length}</div>
+              <div className="stat-card border-l-4 border-white/20">
+                <p className="text-[10px] uppercase tracking-widest font-bold text-gray-400">Total devis</p>
+                <p className="text-2xl font-black text-white mt-1">{devis.length}</p>
               </div>
-              <div className="panel-raised rounded-xl p-4 border-l-4 border-amber-500">
-                <div className="text-sm text-amber-700 font-medium">En attente</div>
-                <div className="text-2xl font-bold text-amber-800 mt-1">
+              <div className="stat-card border-l-4 border-[#FFEF3F]">
+                <p className="text-[10px] uppercase tracking-widest font-bold text-gray-400">En attente</p>
+                <p className="text-2xl font-black text-white mt-1">
                   {devis.filter((item) => item.statut === 'En attente').length}
-                </div>
+                </p>
               </div>
-              <div className="panel-raised rounded-xl p-4 border-l-4 border-green-500">
-                <div className="text-sm text-green-700 font-medium">Accord mutuel</div>
-                <div className="text-2xl font-bold text-green-800 mt-1">
+              <div className="stat-card border-l-4 border-white/20">
+                <p className="text-[10px] uppercase tracking-widest font-bold text-gray-400">Accord mutuel</p>
+                <p className="text-2xl font-black text-white mt-1">
                   {devis.filter((item) => item.statut === 'Accord mutuel').length}
-                </div>
+                </p>
               </div>
             </div>
 
-            <div className="panel-raised rounded-lg p-6 overflow-x-auto">
-              <h2 className="text-xl font-bold mb-4">🧾 Devis liés par personne</h2>
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+            <div className="table-frame overflow-x-auto">
+              <div className="p-5 panel-deep border-b border-gray-100">
+                <h2 className="text-sm font-black uppercase tracking-widest text-[#0D0D0D]">Devis liés par personne</h2>
+              </div>
+              <table className="min-w-full divide-y divide-gray-100">
+                <thead className="bg-[#0D0D0D]">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Titre</th>
-                    <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Assigné</th>
-                    <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Montant</th>
-                    <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Statut</th>
-                    <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">Date</th>
-                    <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">PJ</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Titre</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Assigné</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Montant</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Statut</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Date</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">PJ</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-100">
                   {devis.map((item) => (
-                    <tr key={item.id} className="hover:bg-slate-100/80">
-                      <td className="px-4 py-2 font-semibold">{item.titre}</td>
-                      <td className="px-4 py-2 text-sm text-gray-700">{item.assigne || '-'}</td>
-                      <td className="px-4 py-2">{Number(item.montant || 0).toLocaleString('fr-FR')}€</td>
-                      <td className="px-4 py-2">
-                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${item.statut === 'En attente' ? 'bg-amber-100 text-amber-800' : item.statut === 'Accord mutuel' ? 'bg-green-100 text-green-800' : item.statut === 'Refus' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}>
+                    <tr key={item.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 font-semibold text-sm text-[#0D0D0D]">{item.titre}</td>
+                      <td className="px-4 py-3 text-sm text-gray-500">{item.assigne || '—'}</td>
+                      <td className="px-4 py-3 font-black text-sm">{Number(item.montant || 0).toLocaleString('fr-FR')}€</td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest border ${item.statut === 'En attente' ? 'bg-[#FFEF3F]/20 text-[#0D0D0D] border-[#FFEF3F]' : item.statut === 'Accord mutuel' ? 'bg-[#0D0D0D] text-[#FFEF3F] border-[#0D0D0D]' : item.statut === 'Refus' ? 'bg-red-100 text-red-800 border-red-200' : 'bg-gray-100 text-gray-700 border-gray-200'}`}>
                           {item.statut}
                         </span>
                       </td>
-                      <td className="px-4 py-2 text-sm text-gray-700">{item.dateReception || '-'}</td>
-                      <td className="px-4 py-2 text-sm text-gray-700">{item.piecesJointes?.length || 0}</td>
+                      <td className="px-4 py-3 text-xs text-gray-500">{item.dateReception || '—'}</td>
+                      <td className="px-4 py-3 text-xs text-gray-500">{item.piecesJointes?.length || 0}</td>
                     </tr>
                   ))}
                 </tbody>

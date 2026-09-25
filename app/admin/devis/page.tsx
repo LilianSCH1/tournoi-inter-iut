@@ -1,27 +1,57 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { DevisData } from '@/lib/data/devis';
 import { Download, FileText, Filter } from 'lucide-react';
 
 const STATUTS = ['Envoyé', 'Refus', 'En attente', 'Accord mutuel'] as const;
 
+function getStatutStyle(statut: string): string {
+  switch (statut) {
+    case 'Accord mutuel':
+      return 'bg-green-100 text-green-800 border border-green-200';
+    case 'Refus':
+      return 'bg-red-100 text-red-700 border border-red-200';
+    case 'Envoyé':
+      return 'bg-[#FFEF3F]/25 text-[#78350F] border border-[#FFEF3F]/50';
+    case 'En attente':
+      return 'bg-gray-100 text-gray-700 border border-gray-200';
+    default:
+      return 'bg-gray-100 text-gray-700 border border-gray-200';
+  }
+}
+
 export default function DevisPage() {
+  const router = useRouter();
   const [devis, setDevis] = useState<DevisData[]>([]);
   const [filteredDevis, setFilteredDevis] = useState<DevisData[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedStatut, setSelectedStatut] = useState<string | null>(null);
   const [totalAmount, setTotalAmount] = useState(0);
+  const [statutSaving, setStatutSaving] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchDevis();
-    fetchTotalAmount();
-  }, []);
+    const init = async () => {
+      const res = await fetch('/api/auth/session', { cache: 'no-store' });
+      if (!res.ok) {
+        router.push('/admin/login');
+        return;
+      }
+      fetchDevis();
+      fetchTotalAmount();
+    };
+    init();
+  }, [router]);
 
   const fetchDevis = async () => {
     try {
       setLoading(true);
       const response = await fetch('/api/devis');
+      if (response.status === 401 || response.status === 403) {
+        router.push('/admin/login');
+        return;
+      }
       const data = await response.json();
       setDevis(data);
       setFilteredDevis(data);
@@ -42,147 +72,167 @@ export default function DevisPage() {
     }
   };
 
-  useEffect(() => {
-    const filtered = selectedStatut ? devis.filter((d) => d.statut === selectedStatut) : devis;
-    setFilteredDevis(filtered);
-  }, [selectedStatut, devis]);
-
-  const handleStatutChange = (statut: string) => {
-    setSelectedStatut(selectedStatut === statut ? null : statut);
-  };
-
-  const getStatutColor = (statut: string) => {
-    switch (statut) {
-      case 'Accord mutuel':
-        return 'bg-green-100 text-green-800';
-      case 'Refus':
-        return 'bg-red-100 text-red-800';
-      case 'Envoyé':
-        return 'bg-blue-100 text-blue-800';
-      case 'En attente':
-        return 'bg-amber-100 text-amber-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
+  const updateStatut = async (id: string, statut: string) => {
+    try {
+      setStatutSaving(id);
+      const res = await fetch('/api/devis', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, statut }),
+      });
+      if (!res.ok) throw new Error('Erreur statut devis');
+      await fetchDevis();
+    } catch (error) {
+      console.error('Erreur mise à jour statut devis:', error);
+    } finally {
+      setStatutSaving(null);
     }
   };
 
+  useEffect(() => {
+    const filtered = selectedStatut
+      ? devis.filter((d) => d.statut === selectedStatut)
+      : devis;
+    setFilteredDevis(filtered);
+  }, [selectedStatut, devis]);
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-gray-500">Chargement...</div>
+      <div className="min-h-screen bg-[#0D0D0D] flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#FFEF3F] mx-auto mb-4" />
+          <p className="text-gray-500 text-sm uppercase tracking-widest">Chargement…</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 p-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-slate-900 mb-2">Gestion des Devis</h1>
-          <p className="text-slate-600">Consultez et gérez les devis et pièces jointes</p>
-        </div>
+    <div className="min-h-screen bg-[#FAFAFA]">
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="text-sm text-slate-600 mb-1">Total des devis</div>
-            <div className="text-3xl font-bold text-slate-900">{filteredDevis.length}</div>
-          </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="text-sm text-slate-600 mb-1">Montant total</div>
-            <div className="text-3xl font-bold text-slate-900">{totalAmount.toFixed(2)}€</div>
-          </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="text-sm text-slate-600 mb-1">En attente</div>
-            <div className="text-3xl font-bold text-amber-600">
-              {filteredDevis.filter((d) => d.statut === 'En attente').length}
+      {/* Header */}
+      <div className="bg-[#0D0D0D] border-b-[3px] border-[#FFEF3F]">
+        <div className="max-w-7xl mx-auto px-4 md:px-8 py-6">
+          <p className="text-[10px] uppercase tracking-[0.25em] text-gray-500 font-bold mb-1">
+            Administration
+          </p>
+          <h1 className="text-3xl font-black uppercase tracking-tight text-white">
+            Gestion des devis
+          </h1>
+          <p className="text-gray-500 mt-1 text-sm">Consultez et gérez les devis et pièces jointes</p>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 md:px-8 py-8 space-y-6">
+
+        {/* Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {[
+            { label: 'Total des devis', value: filteredDevis.length, accent: false },
+            {
+              label: 'Montant total',
+              value: `${totalAmount.toFixed(2)} €`,
+              accent: false,
+            },
+            {
+              label: 'En attente',
+              value: filteredDevis.filter((d) => d.statut === 'En attente').length,
+              accent: true,
+            },
+          ].map((s) => (
+            <div
+              key={s.label}
+              className={`stat-card border-l-4 ${s.accent ? 'border-[#FFEF3F]' : 'border-white/20'}`}
+            >
+              <p className="text-xs uppercase tracking-widest font-bold text-gray-400 mb-2">
+                {s.label}
+              </p>
+              <p className="text-3xl font-black text-white">{s.value}</p>
             </div>
-          </div>
+          ))}
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6 mb-8">
+        {/* Filters */}
+        <div className="bg-white border border-gray-200 p-5">
           <div className="flex items-center gap-2 mb-4">
-            <Filter size={20} className="text-slate-600" />
-            <h2 className="text-lg font-semibold text-slate-900">Filtres</h2>
+            <Filter size={16} className="text-gray-400" />
+            <h2 className="text-xs font-black uppercase tracking-widest text-[#0D0D0D]">
+              Filtres
+            </h2>
           </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Statut</label>
-            <div className="flex flex-wrap gap-2">
-              {STATUTS.map((statut) => (
-                <button
-                  key={statut}
-                  onClick={() => handleStatutChange(statut)}
-                  className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-                    selectedStatut === statut
-                      ? getStatutColor(statut)
-                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                  }`}
-                >
-                  {statut}
-                </button>
-              ))}
-            </div>
+          <div className="flex flex-wrap gap-2">
+            {STATUTS.map((statut) => (
+              <button
+                key={statut}
+                onClick={() =>
+                  setSelectedStatut(selectedStatut === statut ? null : statut)
+                }
+                className={`px-4 py-1.5 text-xs font-bold uppercase tracking-widest transition-colors border ${
+                  selectedStatut === statut
+                    ? 'bg-[#0D0D0D] text-[#FFEF3F] border-[#0D0D0D]'
+                    : 'bg-white text-gray-600 border-gray-300 hover:border-[#0D0D0D] hover:text-[#0D0D0D]'
+                }`}
+              >
+                {statut}
+              </button>
+            ))}
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow overflow-hidden">
+        {/* Table */}
+        <div className="table-frame overflow-hidden">
           {filteredDevis.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-slate-50 border-b border-slate-200">
+                <thead className="bg-[#0D0D0D]">
                   <tr>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900">
-                      Titre
-                    </th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900">
-                      Assigné
-                    </th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900">
-                      Montant
-                    </th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900">
-                      Statut
-                    </th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900">
-                      Date réception
-                    </th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-slate-900">
-                      Pièces jointes
-                    </th>
+                    {['Titre', 'Assigné', 'Montant', 'Statut', 'Date réception', 'PJ'].map(
+                      (h) => (
+                        <th
+                          key={h}
+                          className="px-6 py-3 text-left text-[10px] font-black uppercase tracking-widest text-gray-400"
+                        >
+                          {h}
+                        </th>
+                      )
+                    )}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200">
+                <tbody className="divide-y divide-gray-100">
                   {filteredDevis.map((item) => (
-                    <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-4 text-sm text-slate-900 font-medium">
+                    <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4 text-sm font-semibold text-[#0D0D0D]">
                         {item.titre}
                       </td>
-                      <td className="px-6 py-4 text-sm text-slate-600">{item.assigne || '-'}</td>
-                      <td className="px-6 py-4 text-sm font-semibold text-slate-900">
-                        {item.montant.toFixed(2)}€
+                      <td className="px-6 py-4 text-sm text-gray-500">{item.assigne || '—'}</td>
+                      <td className="px-6 py-4 text-sm font-black text-[#0D0D0D]">
+                        {item.montant.toFixed(2)} €
                       </td>
-                      <td className="px-6 py-4 text-sm">
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs font-medium ${getStatutColor(
+                      <td className="px-6 py-4">
+                        <select
+                          value={item.statut}
+                          onChange={(e) => updateStatut(item.id, e.target.value)}
+                          disabled={statutSaving === item.id}
+                          className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest border disabled:opacity-60 ${getStatutStyle(
                             item.statut
                           )}`}
                         >
-                          {item.statut}
-                        </span>
+                          {STATUTS.map((s) => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
                       </td>
-                      <td className="px-6 py-4 text-sm text-slate-600">
-                        {item.dateReception || '-'}
+                      <td className="px-6 py-4 text-sm text-gray-500">
+                        {item.dateReception || '—'}
                       </td>
                       <td className="px-6 py-4 text-sm">
                         {item.piecesJointes && item.piecesJointes.length > 0 ? (
-                          <div className="flex items-center gap-2">
-                            <FileText size={16} className="text-blue-600" />
-                            <span className="text-blue-600 font-medium">
-                              {item.piecesJointes.length}
-                            </span>
+                          <div className="flex items-center gap-1.5 font-bold text-[#0D0D0D]">
+                            <FileText size={14} />
+                            {item.piecesJointes.length}
                           </div>
                         ) : (
-                          <span className="text-slate-400">-</span>
+                          <span className="text-gray-300">—</span>
                         )}
                       </td>
                     </tr>
@@ -191,87 +241,83 @@ export default function DevisPage() {
               </table>
             </div>
           ) : (
-            <div className="p-8 text-center text-slate-500">
-              <FileText size={48} className="mx-auto mb-4 opacity-30" />
-              <p>Aucun devis trouvé</p>
+            <div className="p-12 text-center">
+              <FileText size={40} className="mx-auto mb-3 text-gray-300" />
+              <p className="text-sm text-gray-400">Aucun devis trouvé</p>
             </div>
           )}
         </div>
 
+        {/* Detail cards */}
         {filteredDevis.length > 0 && (
-          <div className="mt-8">
-            <h2 className="text-2xl font-bold text-slate-900 mb-4">Détails des devis</h2>
-            <div className="grid grid-cols-1 gap-4">
-              {filteredDevis.map((item) => (
-                <div key={item.id} className="bg-white rounded-lg shadow p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <h3 className="text-lg font-bold text-slate-900 mb-1">{item.titre}</h3>
-                      <p className="text-sm text-slate-600">{item.assigne || 'Non assigné'}</p>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-2xl font-bold text-slate-900">
-                        {item.montant.toFixed(2)}€
-                      </div>
-                    </div>
+          <div className="space-y-4">
+            <h2 className="text-xl font-black uppercase tracking-tight text-[#0D0D0D]">
+              Détails des devis
+            </h2>
+            {filteredDevis.map((item) => (
+              <div key={item.id} className="bg-white border border-gray-200 p-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-black text-[#0D0D0D]">{item.titre}</h3>
+                    <p className="text-sm text-gray-500 mt-0.5">{item.assigne || 'Non assigné'}</p>
                   </div>
-
-                  <div className="flex gap-2 mb-4">
-                    <span
-                      className={`px-2 py-1 rounded-full text-xs font-medium ${getStatutColor(
-                        item.statut
-                      )}`}
-                    >
-                      {item.statut}
-                    </span>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-2xl font-black text-[#0D0D0D]">
+                      {item.montant.toFixed(2)} €
+                    </p>
                   </div>
-
-                  {item.dateReception && (
-                    <div className="mb-4 text-sm text-slate-600">
-                      Date réception: {item.dateReception}
-                    </div>
-                  )}
-
-                  {item.notes && (
-                    <div className="mb-4">
-                      <p className="text-sm text-slate-600 bg-slate-50 p-3 rounded">
-                        {item.notes}
-                      </p>
-                    </div>
-                  )}
-
-                  {item.piecesJointes && item.piecesJointes.length > 0 && (
-                    <div className="border-t border-slate-200 pt-4">
-                      <h4 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                        <Download size={16} />
-                        Pièces jointes ({item.piecesJointes.length})
-                      </h4>
-                      <div className="space-y-2">
-                        {item.piecesJointes.map((attachment) => (
-                          <a
-                            key={attachment.id}
-                            href={attachment.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-2 p-2 bg-slate-50 rounded hover:bg-slate-100 transition-colors"
-                          >
-                            <Download size={16} className="text-blue-600" />
-                            <span className="text-sm text-blue-600 font-medium">
-                              {attachment.filename}
-                            </span>
-                            <span className="text-xs text-slate-500 ml-auto">
-                              {(attachment.size / 1024).toFixed(1)} KB
-                            </span>
-                          </a>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
-              ))}
-            </div>
+
+                <span
+                  className={`inline-block px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest ${getStatutStyle(
+                    item.statut
+                  )}`}
+                >
+                  {item.statut}
+                </span>
+
+                {item.dateReception && (
+                  <p className="mt-3 text-sm text-gray-500">Reçu le : {item.dateReception}</p>
+                )}
+
+                {item.notes && (
+                  <p className="mt-3 text-sm text-gray-600 bg-gray-50 border border-gray-100 p-3">
+                    {item.notes}
+                  </p>
+                )}
+
+                {item.piecesJointes && item.piecesJointes.length > 0 && (
+                  <div className="mt-5 border-t border-gray-100 pt-5">
+                    <h4 className="text-xs font-black uppercase tracking-widest text-[#0D0D0D] mb-3 flex items-center gap-2">
+                      <Download size={14} />
+                      Pièces jointes ({item.piecesJointes.length})
+                    </h4>
+                    <div className="space-y-2">
+                      {item.piecesJointes.map((attachment) => (
+                        <a
+                          key={attachment.id}
+                          href={attachment.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-3 px-4 py-2.5 bg-[#F4F4F5] hover:bg-[#FFEF3F]/20 hover:border-[#FFEF3F] border border-transparent transition-colors group"
+                        >
+                          <Download size={14} className="text-gray-400 group-hover:text-[#0D0D0D]" />
+                          <span className="text-sm font-semibold text-[#0D0D0D] flex-1">
+                            {attachment.filename}
+                          </span>
+                          <span className="text-xs text-gray-400">
+                            {(attachment.size / 1024).toFixed(1)} KB
+                          </span>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         )}
+
       </div>
     </div>
   );
