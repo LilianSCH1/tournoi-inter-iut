@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server';
 import { createIncident, getAllIncidents, updateIncidentStatut } from '@/lib/data/incidents';
+import { requireRole } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export async function GET() {
+  const auth = await requireRole(['admin', 'benevole']);
+  if (auth.error) return auth.error;
+
   try {
     const incidents = await getAllIncidents();
     return NextResponse.json(incidents, {
@@ -19,6 +23,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireRole(['admin', 'benevole']);
+  if (auth.error) return auth.error;
+
   try {
     const body = await request.json();
     const { typeUrgence, gravite, lieu, description, personneConcernee, contactSignalant, motUrgenceUtilise } = body;
@@ -63,6 +70,9 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const auth = await requireRole(['admin', 'benevole']);
+  if (auth.error) return auth.error;
+
   try {
     const body = await request.json();
     const { id, statut, prisEnChargePar, actionsPrises } = body;

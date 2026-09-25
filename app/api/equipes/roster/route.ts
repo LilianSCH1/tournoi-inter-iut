@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server';
 import { getAllParticipants, updateParticipantEquipe } from '@/lib/data/participants';
 import { getAllEquipes } from '@/lib/data/equipes';
+import { requireRole } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export async function PATCH(request: Request) {
+  const auth = await requireRole(['admin']);
+  if (auth.error) return auth.error;
+
   try {
     const body = await request.json();
     const { participantId, equipeId, action } = body as {

@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server';
 import { getTacheById, updateTacheStatut } from '@/lib/data/taches';
+import { requireRole } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+  const auth = await requireRole(['admin', 'benevole']);
+  if (auth.error) return auth.error;
+
   try {
     const params = await context.params;
     const { id } = params;
@@ -18,6 +22,9 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 }
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  const auth = await requireRole(['admin', 'benevole']);
+  if (auth.error) return auth.error;
+
   try {
     const params = await context.params;
     const { id } = params;

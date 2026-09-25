@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { authenticateJoueur } from '@/lib/auth';
 import { getEquipeByCode } from '@/lib/data/equipes';
+import { setSessionCookie } from '@/lib/session';
 
 export async function POST(request: Request) {
   try {
@@ -11,12 +12,26 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Code équipe requis' }, { status: 400 });
     }
 
-    const user = await authenticateJoueur(codeEquipe);
-    if (!user) {
-      return NextResponse.json({ error: 'Code équipe invalide' }, { status: 401 });
+    const result = await authenticateJoueur(codeEquipe);
+    if (!result.ok) {
+      const messages: Record<typeof result.reason, string> = {
+        not_found: 'Code équipe invalide',
+        pending: 'Cette équipe est en attente de validation par l\'organisation. Réessayez un peu plus tard.',
+        refused: 'La candidature de cette équipe a été refusée. Contactez l\'organisation.',
+      };
+      return NextResponse.json({ error: messages[result.reason] }, { status: result.reason === 'not_found' ? 401 : 403 });
     }
 
+    const { user } = result;
     const equipe = await getEquipeByCode(codeEquipe.toUpperCase());
+
+    await setSessionCookie({
+      role: 'joueur',
+      equipeId: user.equipeId,
+      equipeName: user.equipeName || equipe?.nom,
+      iut: equipe?.iut || '',
+      codeEquipe: codeEquipe.toUpperCase(),
+    });
 
     return NextResponse.json({
       success: true,

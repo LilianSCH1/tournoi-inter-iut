@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { mkdir, writeFile } from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
+import { requireRole } from '@/lib/session';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -22,6 +23,9 @@ function safeFilename(filename: string): string {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireRole(['admin', 'benevole']);
+  if (auth.error) return auth.error;
+
   try {
     const origin = new URL(request.url).origin;
     const formData = await request.formData();

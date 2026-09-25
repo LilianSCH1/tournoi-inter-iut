@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { authenticateBenevole } from '@/lib/auth';
+import { setSessionCookie } from '@/lib/session';
 
 export async function POST(request: Request) {
   try {
@@ -11,6 +12,8 @@ export async function POST(request: Request) {
     if (!user) {
       return NextResponse.json({ error: 'Identifiants invalides' }, { status: 401 });
     }
+
+    await setSessionCookie({ role: 'benevole', email: user.email, nomComplet: user.nomComplet });
 
     return NextResponse.json({
       success: true,

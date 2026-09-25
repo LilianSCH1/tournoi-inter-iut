@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server';
 import { createBudgetLine, updateBudgetLine } from '@/lib/data/live';
+import { requireRole } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export async function PATCH(request: Request) {
+  const auth = await requireRole(['admin']);
+  if (auth.error) return auth.error;
+
   try {
     const body = await request.json();
     const { id, poste, categorie, type, montantPrevu, montantReel, statutPaiement } = body;
@@ -34,6 +38,9 @@ export async function PATCH(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireRole(['admin']);
+  if (auth.error) return auth.error;
+
   try {
     const body = await request.json();
     const { poste, categorie, type, montantPrevu, montantReel, statutPaiement } = body;

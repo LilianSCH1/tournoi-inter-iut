@@ -17,22 +17,37 @@ export interface AuthUser {
 // AUTHENTIFICATION JOUEUR (Code équipe)
 // ========================================
 
-export async function authenticateJoueur(codeEquipe: string): Promise<AuthUser | null> {
+export type JoueurAuthResult =
+  | { ok: true; user: AuthUser }
+  | { ok: false; reason: 'not_found' | 'pending' | 'refused' };
+
+// La candidature d'une équipe doit être validée par un admin avant que ses
+// joueurs puissent se connecter — voir lib/data/equipes.ts#updateEquipeValidation.
+export async function authenticateJoueur(codeEquipe: string): Promise<JoueurAuthResult> {
   try {
     const equipe = await getEquipeByCode(codeEquipe.toUpperCase());
-    
+
     if (!equipe) {
-      return null;
+      return { ok: false, reason: 'not_found' };
     }
-    
+    if (equipe.statutValidation === 'Refusée') {
+      return { ok: false, reason: 'refused' };
+    }
+    if (equipe.statutValidation !== 'Validée') {
+      return { ok: false, reason: 'pending' };
+    }
+
     return {
-      role: 'joueur',
-      equipeId: equipe.id,
-      equipeName: equipe.nom,
+      ok: true,
+      user: {
+        role: 'joueur',
+        equipeId: equipe.id,
+        equipeName: equipe.nom,
+      },
     };
   } catch (error) {
     console.error('Erreur auth joueur:', error);
-    return null;
+    return { ok: false, reason: 'not_found' };
   }
 }
 
@@ -96,34 +111,18 @@ export async function authenticateAdmin(email: string, password: string): Promis
   }
 
   // Provisioning automatique Staff -> accès admin
-  const staff = await getStaffByEmail(email);
-  const staffDefaultPassword = process.env.STAFF_DEFAULT_PASSWORD || process.env.BENEVOLE_DEFAULT_PASSWORD || 'Benevole2027!';
-
-  if (staff && password === staffDefaultPassword) {
-    return {
-      email,
-      role: 'admin',
-    };
+  // Nécessite STAFF_DEFAULT_PASSWORD (pas de valeur par défaut codée en dur :
+  // sans cette variable d'env, ce mode de provisioning est simplement désactivé).
+  const staffDefaultPassword = process.env.STAFF_DEFAULT_PASSWORD || process.env.BENEVOLE_DEFAULT_PASSWORD;
+  if (staffDefaultPassword) {
+    const staff = await getStaffByEmail(email);
+    if (staff && password === staffDefaultPassword) {
+      return {
+        email,
+        role: 'admin',
+      };
+    }
   }
-  
+
   return null;
-}
-
-// ========================================
-// GÉNÉRATION DE SESSION TOKEN
-// ========================================
-
-export function generateSessionToken(user: AuthUser): string {
-  // En production, utilisez un vrai JWT
-  // Pour l'instant, simple encodage Base64
-  return Buffer.from(JSON.stringify(user)).toString('base64');
-}
-
-export function decodeSessionToken(token: string): AuthUser | null {
-  try {
-    const decoded = Buffer.from(token, 'base64').toString('utf-8');
-    return JSON.parse(decoded);
-  } catch {
-    return null;
-  }
 }

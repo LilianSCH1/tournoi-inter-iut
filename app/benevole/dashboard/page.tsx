@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { LogOut, UserCheck, Trophy, AlertTriangle, ClipboardList, ShieldAlert, FileText } from 'lucide-react';
+import { LogOut, UserCheck, Trophy, AlertTriangle, ClipboardList, ShieldAlert, FileText, ExternalLink } from 'lucide-react';
 
 function normalizeLabel(value: string): string {
   return String(value || '')
@@ -63,9 +65,7 @@ function deriveBenevoleAliases(session: any): string[] {
     aliases.add(normalizeLabel(localPart.replace(/\d+$/g, '')));
   }
 
-  const result = Array.from(aliases).filter(Boolean);
-  console.log('📧 Derived aliases for', email, ':', result);
-  return result;
+  return Array.from(aliases).filter(Boolean);
 }
 
 export default function DashboardBenevolePage() {
@@ -99,8 +99,8 @@ export default function DashboardBenevolePage() {
   const [newDevisFiles, setNewDevisFiles] = useState<File[]>([]);
   const [lastRefresh, setLastRefresh] = useState<string>('');
   const [uiMessage, setUiMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const scrollPanelClass = 'divide-y divide-slate-200/70 max-h-[41.4rem] overflow-y-auto';
-  const matchScrollPanelClass = 'divide-y divide-slate-200/70 max-h-[34.7rem] overflow-y-auto';
+  const scrollPanelClass = 'divide-y divide-gray-100 max-h-[41.4rem] overflow-y-auto';
+  const matchScrollPanelClass = 'divide-y divide-gray-100 max-h-[34.7rem] overflow-y-auto';
 
   const showUiMessage = (type: 'success' | 'error', text: string) => {
     setUiMessage({ type, text });
@@ -159,19 +159,14 @@ export default function DashboardBenevolePage() {
 
       const tasks = await res.json();
       const allTasks = Array.isArray(tasks) ? tasks : [];
-      
-      console.log('🔍 DEBUG - Normalized Aliases:', normalizedAliases);
-      console.log('🔍 DEBUG - Participant ID:', pidLower);
-      console.log('🔍 DEBUG - All tasks count:', allTasks.length);
-      
+
       const matchedTasks = allTasks.filter((task: any) => {
-        // Direct ID match
+        // Correspondance directe par identifiant
         if (pidLower && String(task.responsable || '').trim().toLowerCase() === pidLower) {
-          console.log('✅ Task matched by ID:', task.titre, '| Responsable ID:', task.responsable);
           return true;
         }
-        
-        // Name/alias match
+
+        // Correspondance par nom/alias (repli si l'identifiant n'est pas disponible)
         const taskResponsables = Array.isArray(task.responsable) ? task.responsable : [task.responsable];
         const normalizedResponsables = taskResponsables.map((value: unknown) => normalizeLabel(String(value || ''))).filter(Boolean);
 
@@ -179,17 +174,11 @@ export default function DashboardBenevolePage() {
           return false;
         }
 
-        const isMatch = normalizedResponsables.some((taskResponsable: string) =>
+        return normalizedResponsables.some((taskResponsable: string) =>
           normalizedAliases.some((alias) => {
             return taskResponsable === alias || taskResponsable.includes(alias) || alias.includes(taskResponsable);
           })
         );
-        
-        if (isMatch) {
-          console.log('✅ Task matched by name:', task.titre, '| Responsables:', normalizedResponsables);
-        }
-        
-        return isMatch;
       });
 
       setBenevoleTasks(matchedTasks);
@@ -243,15 +232,17 @@ export default function DashboardBenevolePage() {
   };
 
   useEffect(() => {
-    const session = sessionStorage.getItem('benevole_session');
-    if (!session) {
-      router.push('/benevole/login');
-      return;
-    }
-    const parsedSession = JSON.parse(session);
+    let liveInterval: ReturnType<typeof setInterval> | undefined;
+    let taskInterval: ReturnType<typeof setInterval> | undefined;
 
     const initializeBenevole = async () => {
-      let nextSession = parsedSession;
+      const sessionRes = await fetch('/api/auth/session', { cache: 'no-store' });
+      if (!sessionRes.ok) {
+        sessionStorage.removeItem('benevole_session');
+        router.push('/benevole/login');
+        return;
+      }
+      let nextSession = (await sessionRes.json()).session;
 
       // Always try to fetch and set participantId from email if not already set
       if (!nextSession?.participantId && nextSession?.email) {
@@ -290,11 +281,21 @@ export default function DashboardBenevolePage() {
       loadLiveData();
       loadBenevoleTasks(deriveBenevoleAliases(nextSession), nextSession?.participantId);
       loadBenevoleDevis(nextSession?.nomComplet || nextSession?.email);
+
+      liveInterval = setInterval(loadLiveData, 5000);
+      // Tâches/devis changent moins souvent que les scores en direct : un
+      // rafraîchissement plus espacé suffit et évite des requêtes inutiles.
+      taskInterval = setInterval(() => {
+        loadBenevoleTasks(deriveBenevoleAliases(nextSession), nextSession?.participantId);
+        loadBenevoleDevis(nextSession?.nomComplet || nextSession?.email);
+      }, 20000);
     };
 
     initializeBenevole();
-    const interval = setInterval(loadLiveData, 5000);
-    return () => clearInterval(interval);
+    return () => {
+      if (liveInterval) clearInterval(liveInterval);
+      if (taskInterval) clearInterval(taskInterval);
+    };
   }, [router]);
 
   useEffect(() => {
@@ -304,9 +305,13 @@ export default function DashboardBenevolePage() {
     }
   }, [benevoleTasks, tasksAlertShown]);
 
-  const handleLogout = () => {
-    sessionStorage.removeItem('benevole_session');
-    router.push('/');
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } finally {
+      sessionStorage.removeItem('benevole_session');
+      router.push('/');
+    }
   };
 
   const filteredParticipants = participants.filter((p) => {
@@ -521,7 +526,7 @@ export default function DashboardBenevolePage() {
   if (!benevoleData) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-lorraine-red"></div>
+        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-[#FFEF3F]"></div>
       </div>
     );
   }
@@ -529,16 +534,22 @@ export default function DashboardBenevolePage() {
   return (
     <div className="min-h-screen">
       {/* Header */}
-      <div className="bg-gradient-to-r from-lorraine-red to-red-700 text-white shadow-lg">
-        <div className="container mx-auto px-4 py-6">
+      <div className="bg-[#0D0D0D] border-b-[3px] border-[#FFEF3F] text-white">
+        <div className="container mx-auto px-4 py-5">
           <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold">Dashboard Bénévole</h1>
-              <p className="text-red-100 mt-1">{benevoleData.email}</p>
+            <div className="flex items-center gap-3">
+              <Image src="/Logo_Tournoi_IUT_jaune.png" alt="Logo" width={40} height={40} className="flex-shrink-0" />
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.22em] text-gray-500 mb-1">Espace Bénévole</p>
+                <h1 className="text-xl font-black uppercase tracking-wide text-white">
+                  {benevoleData.nomComplet || 'Bénévole'}
+                </h1>
+                <p className="text-sm text-[#FFEF3F] mt-0.5">{benevoleData.email}</p>
+              </div>
             </div>
             <button
               onClick={handleLogout}
-              className="flex items-center gap-2 bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition-colors"
+              className="flex items-center gap-2 border border-white/20 hover:border-[#FFEF3F] hover:text-[#FFEF3F] text-gray-400 px-4 py-2 text-sm transition-colors uppercase tracking-wide font-semibold"
             >
               <LogOut className="w-4 h-4" />
               Déconnexion
@@ -549,163 +560,86 @@ export default function DashboardBenevolePage() {
 
       <div className="container mx-auto px-4 py-8">
         {/* Stats */}
-        <div className="grid md:grid-cols-4 gap-6 mb-6">
-          <div className="panel-raised rounded-lg p-6">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-                <UserCheck className="w-6 h-6 text-green-600" />
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+          {[
+            { label: 'Check-in', value: `${participants.filter((p) => p.statutArrivee === 'present').length}/${participants.filter((p) => p.statutArrivee !== 'absent').length}`, icon: <UserCheck className="w-4 h-4" /> },
+            { label: 'Matchs', value: matchsDuJour.length, icon: <Trophy className="w-4 h-4" /> },
+            { label: 'En cours', value: matchsDuJour.filter(m => m.statut === 'En cours').length, icon: <span className="w-2.5 h-2.5 bg-[#DC2626] rounded-full animate-pulse inline-block" /> },
+            { label: 'Incidents', value: incidents.filter((i) => i.statut !== 'Résolu' && i.statut !== 'Clôturé').length, icon: <AlertTriangle className="w-4 h-4" /> },
+            { label: 'Mes tâches', value: benevoleTasks.length, icon: <ClipboardList className="w-4 h-4" /> },
+          ].map((stat) => (
+            <div key={stat.label} className="stat-card flex items-center gap-3 !p-4">
+              <div className="w-8 h-8 bg-[#FFEF3F] flex items-center justify-center text-[#0D0D0D] flex-shrink-0">
+                {stat.icon}
               </div>
               <div>
-                <p className="text-sm text-gray-600">Check-in</p>
-                <p className="text-2xl font-bold">
-                  {participants.filter((p) => p.statutArrivee === 'present').length}/{participants.filter((p) => p.statutArrivee !== 'absent').length}
-                </p>
+                <p className="text-[10px] uppercase tracking-widest text-gray-400 font-bold leading-tight">{stat.label}</p>
+                <p className="text-xl font-black text-white leading-tight">{stat.value}</p>
               </div>
             </div>
-          </div>
-
-          <div className="panel-raised rounded-lg p-6">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                <Trophy className="w-6 h-6 text-lorraine-blue" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Matchs du jour</p>
-                <p className="text-2xl font-bold">{matchsDuJour.length}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="panel-raised rounded-lg p-6">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">En cours</p>
-                <p className="text-2xl font-bold">
-                  {matchsDuJour.filter(m => m.statut === 'En cours').length}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="panel-raised rounded-lg p-6">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
-                <AlertTriangle className="w-6 h-6 text-yellow-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Incidents</p>
-                <p className="text-2xl font-bold">{incidents.filter((i) => i.statut !== 'Résolu' && i.statut !== 'Clôturé').length}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="panel-raised rounded-lg p-6">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center">
-                <ClipboardList className="w-6 h-6 text-amber-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Mes tâches</p>
-                <p className="text-2xl font-bold">{benevoleTasks.length}</p>
-              </div>
-            </div>
-          </div>
+          ))}
         </div>
 
 
         {uiMessage && (
-          <div className={`mb-4 rounded-lg px-4 py-3 text-sm font-semibold ${uiMessage.type === 'success' ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-red-100 text-red-800 border border-red-200'}`}>
+          <div className={`mb-4 border-l-4 px-4 py-3 text-sm font-semibold ${uiMessage.type === 'success' ? 'border-[#FFEF3F] bg-[#FFEF3F]/10 text-[#0D0D0D]' : 'border-[#DC2626] bg-red-50 text-red-800'}`}>
             {uiMessage.text}
           </div>
         )}
 
-        <div className="panel-raised rounded-lg p-3 mb-6">
-          <div className="grid sm:grid-cols-3 gap-2">
-            <button
-              onClick={() => setActiveSection('checkin')}
-              className={`px-4 py-3 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 ${activeSection === 'checkin' ? 'bg-green-600 text-white' : 'bg-green-100 text-green-800 hover:bg-green-200'}`}
-            >
-              <UserCheck className="w-4 h-4" />
-              Check-in
-            </button>
-            <button
-              onClick={() => setActiveSection('matchs')}
-              className={`px-4 py-3 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 ${activeSection === 'matchs' ? 'bg-lorraine-blue text-white' : 'bg-blue-100 text-blue-800 hover:bg-blue-200'}`}
-            >
-              <ClipboardList className="w-4 h-4" />
-              Matchs
-            </button>
-            <button
-              onClick={() => setActiveSection('incidents')}
-              className={`px-4 py-3 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 ${activeSection === 'incidents' ? 'bg-red-700 text-white' : 'bg-red-100 text-red-800 hover:bg-red-200'}`}
-            >
-              <ShieldAlert className="w-4 h-4" />
-              Incidents
-            </button>
-            <button
-              onClick={() => setActiveSection('taches')}
-              className={`px-4 py-3 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 ${activeSection === 'taches' ? 'bg-amber-700 text-white' : 'bg-amber-100 text-amber-800 hover:bg-amber-200'}`}
-            >
-              <ClipboardList className="w-4 h-4" />
-              Tâches
-            </button>
-            <button
-              onClick={() => setActiveSection('devis')}
-              className={`px-4 py-3 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 ${activeSection === 'devis' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-800 hover:bg-slate-200'}`}
-            >
-              <FileText className="w-4 h-4" />
-              Devis
-            </button>
+        <div className="panel-raised mb-6">
+          <div className="flex overflow-x-auto">
+            {([
+              { id: 'checkin', label: 'Check-in', icon: <UserCheck className="w-4 h-4" /> },
+              { id: 'matchs', label: 'Matchs', icon: <Trophy className="w-4 h-4" /> },
+              { id: 'incidents', label: 'Incidents', icon: <ShieldAlert className="w-4 h-4" /> },
+              { id: 'taches', label: 'Tâches', icon: <ClipboardList className="w-4 h-4" /> },
+              { id: 'devis', label: 'Devis', icon: <FileText className="w-4 h-4" /> },
+            ] as const).map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveSection(tab.id)}
+                className={`flex-1 min-w-[100px] px-4 py-3 text-sm font-bold uppercase tracking-wide flex items-center justify-center gap-2 border-b-2 transition-colors whitespace-nowrap ${activeSection === tab.id ? 'border-[#FFEF3F] bg-[#0D0D0D] text-white' : 'border-transparent text-gray-600 hover:text-[#0D0D0D] hover:bg-gray-50'}`}
+              >
+                {tab.icon}
+                {tab.label}
+              </button>
+            ))}
           </div>
-          <p className="text-xs text-gray-600 mt-2 px-1">
-            Zone active: {activeSection === 'checkin' ? 'Validation des arrivées' : activeSection === 'matchs' ? 'Pilotage des matchs' : activeSection === 'incidents' ? 'Gestion des incidents' : 'Gestion des devis'}
-            {lastRefresh ? ` • Données rafraîchies à ${lastRefresh}` : ''}
-          </p>
+          {lastRefresh && (
+            <p className="text-[10px] text-gray-400 px-4 py-2 border-t border-gray-100 uppercase tracking-widest">
+              Données rafraîchies à {lastRefresh}
+            </p>
+          )}
         </div>
 
         {activeSection === 'checkin' && (
-          <div className="panel-raised rounded-lg">
-            <div className="p-6 panel-deep rounded-t-lg">
-              <h2 className="text-xl font-bold flex items-center gap-2">
-                <UserCheck className="w-5 h-5 text-green-600" />
+          <div className="table-frame">
+            <div className="p-5 panel-deep border-b border-gray-100">
+              <h2 className="text-sm font-black uppercase tracking-widest text-[#0D0D0D] flex items-center gap-2 mb-3">
+                <UserCheck className="w-4 h-4" />
                 Check-in Participants
               </h2>
-              <p className="text-sm text-gray-600 mt-1">Recherche rapide puis changement de statut en un clic.</p>
               <input
                 type="text"
-                placeholder="Rechercher un participant..."
+                placeholder="Rechercher un participant…"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full mt-4 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-lorraine-red"
+                className="input"
               />
-              <div className="mt-3 grid sm:grid-cols-5 gap-2">
-                <button
-                  onClick={() => setArrivalFilter('all')}
-                  className={`px-3 py-2 rounded text-sm font-semibold ${arrivalFilter === 'all' ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-700'}`}
-                >
-                  Tous
-                </button>
-                <button
-                  onClick={() => setArrivalFilter('confirmed')}
-                  className={`px-3 py-2 rounded text-sm font-semibold ${arrivalFilter === 'confirmed' ? 'bg-green-600 text-white' : 'bg-green-100 text-green-800'}`}
-                >
-                  Confirmées
-                </button>
-                <button
-                  onClick={() => setArrivalFilter('en_attente')}
-                  className={`px-3 py-2 rounded text-sm font-semibold ${arrivalFilter === 'en_attente' ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-800'}`}
-                >
-                  En attente
-                </button>
-                <button
-                  onClick={() => setArrivalFilter('absent')}
-                  className={`px-3 py-2 rounded text-sm font-semibold ${arrivalFilter === 'absent' ? 'bg-red-600 text-white' : 'bg-red-100 text-red-800'}`}
-                >
-                  Absents
-                </button>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {(['all', 'confirmed', 'en_attente', 'absent'] as const).map((filter) => {
+                  const labels: Record<string, string> = { all: 'Tous', confirmed: 'Présents', en_attente: 'En attente', absent: 'Absents' };
+                  return (
+                    <button
+                      key={filter}
+                      onClick={() => setArrivalFilter(filter)}
+                      className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wide border transition-colors ${arrivalFilter === filter ? 'bg-[#0D0D0D] text-[#FFEF3F] border-[#0D0D0D]' : 'bg-white text-gray-600 border-gray-300 hover:border-[#0D0D0D] hover:text-[#0D0D0D]'}`}
+                    >
+                      {labels[filter]}
+                    </button>
+                  );
+                })}
               </div>
             </div>
             <div className={matchScrollPanelClass}>
@@ -713,42 +647,49 @@ export default function DashboardBenevolePage() {
                 <div className="p-8 text-center text-sm text-gray-600">Aucun participant trouvé avec ce filtre.</div>
               )}
               {filteredParticipants.map((participant, index) => (
-                <div key={participant.id || index} className="p-4 hover:bg-slate-100/80">
-                  <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="font-semibold">{participant.nomComplet}</div>
-                      <div className="text-sm text-gray-600">{participant.iut}</div>
-                      <div className="text-xs text-gray-500 mt-1">{participant.licenceSportive || 'Licence non renseignée'}</div>
-                      <div className="mt-2">
+                <div key={participant.id || index} className="p-4 hover:bg-gray-50">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-[#0D0D0D] truncate">{participant.nomComplet}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">{participant.iut}</div>
+                      {(participant.allergiesAlimentaires || participant.tailleMaillot) && (
+                        <div className="text-xs text-gray-500 mt-0.5 flex flex-wrap gap-3">
+                          {participant.allergiesAlimentaires && (
+                            <span className="text-amber-700">⚠ Allergies : {participant.allergiesAlimentaires}</span>
+                          )}
+                          {participant.tailleMaillot && <span>Maillot : {participant.tailleMaillot}</span>}
+                        </div>
+                      )}
+                      <div className="mt-1.5">
                         {participant.statutArrivee === 'present' && (
-                          <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-xs font-semibold">Présent</span>
+                          <span className="bg-[#0D0D0D] text-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest">Présent</span>
                         )}
                         {participant.statutArrivee === 'absent' && (
-                          <span className="bg-red-100 text-red-800 px-3 py-1 rounded-full text-xs font-semibold">Absent</span>
+                          <span className="bg-red-100 text-red-800 px-2 py-0.5 text-[10px] font-bold uppercase border border-red-200">Absent</span>
                         )}
                         {participant.statutArrivee === 'en_attente' && (
-                          <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-xs font-semibold">En attente</span>
+                          <span className="bg-gray-100 text-gray-600 px-2 py-0.5 text-[10px] font-bold uppercase border border-gray-200">En attente</span>
                         )}
                       </div>
                     </div>
-                    <div className="grid grid-cols-3 md:grid-cols-1 gap-2 min-w-40">
+                    <div className="flex gap-2 flex-shrink-0">
                       <button
                         onClick={() => handleArrivalStatus(participant.id, participant.nomComplet, 'present')}
-                        className="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm font-semibold transition-colors"
+                        className="bg-[#0D0D0D] hover:bg-[#222] text-[#FFEF3F] px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition-colors"
                       >
                         Présent
                       </button>
                       <button
                         onClick={() => handleArrivalStatus(participant.id, participant.nomComplet, 'absent')}
-                        className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-sm font-semibold transition-colors"
+                        className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition-colors"
                       >
                         Absent
                       </button>
                       <button
                         onClick={() => handleArrivalStatus(participant.id, participant.nomComplet, 'en_attente')}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-semibold transition-colors"
+                        className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition-colors"
                       >
-                        En attente
+                        Attente
                       </button>
                     </div>
                   </div>
@@ -759,64 +700,64 @@ export default function DashboardBenevolePage() {
         )}
 
         {activeSection === 'matchs' && (
-          <div className="panel-raised rounded-lg">
-            <div className="p-6 panel-deep rounded-t-lg">
-              <h2 className="text-xl font-bold flex items-center gap-2">
-                <Trophy className="w-5 h-5 text-lorraine-blue" />
+          <div className="table-frame">
+            <div className="p-5 panel-deep border-b border-gray-100">
+              <h2 className="text-sm font-black uppercase tracking-widest text-[#0D0D0D] flex items-center gap-2">
+                <Trophy className="w-4 h-4" />
                 Matchs du Jour
               </h2>
-              <p className="text-sm text-gray-600 mt-1">Démarre un match, saisis son score, puis clôture.</p>
+              <p className="text-xs text-gray-500 mt-1">Démarre un match, saisis son score, puis clôture.</p>
             </div>
             <div className={scrollPanelClass}>
               {matchsDuJour.length === 0 && (
-                <div className="p-8 text-center text-sm text-gray-600">Aucun match disponible pour le moment.</div>
+                <div className="p-8 text-center text-sm text-gray-400">Aucun match disponible pour le moment.</div>
               )}
               {matchsDuJour.map((match) => (
-                <div key={match.id} className="p-4 hover:bg-slate-100/80">
+                <div key={match.id} className="p-4 hover:bg-gray-50">
                   <div className="flex justify-between items-start mb-3 gap-4">
                     <div>
-                      <div className="font-bold text-lg flex items-center gap-2">
-                        {match.sport === 'Basket' && '🏀'}
-                        {match.sport === 'Volley' && '🏐'}
+                      <div className="font-black text-[#0D0D0D] uppercase tracking-wide">
+                        {match.sport === 'Basket' && '🏀 '}
+                        {match.sport === 'Volley' && '🏐 '}
                         {match.idMatch || match.id}
                       </div>
-                      <div className="text-sm text-gray-600">{match.terrain || 'Terrain non renseigné'}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">{match.terrain || 'Terrain non renseigné'}</div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-lg font-bold text-lorraine-blue">{match.heureDebut || '--:--'}</div>
+                    <div className="text-right flex-shrink-0">
+                      <div className="text-lg font-black text-[#0D0D0D]">{match.heureDebut || '--:--'}</div>
                       {match.statut === 'En cours' ? (
-                        <div className="bg-red-100 text-red-800 px-2 py-1 rounded text-xs font-semibold mt-1">En cours</div>
+                        <span className="bg-[#DC2626] text-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest mt-1 inline-block">En cours</span>
                       ) : (
-                        <div className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs font-semibold mt-1">{match.statut}</div>
+                        <span className="bg-gray-100 text-gray-700 px-2 py-0.5 text-[10px] font-bold uppercase border border-gray-200 mt-1 inline-block">{match.statut}</span>
                       )}
                     </div>
                   </div>
 
                   <div className="grid grid-cols-3 gap-2 items-center mb-2">
-                    <div className="font-semibold text-sm">{match.equipeA}</div>
-                    <div className="text-center text-gray-500 text-sm">VS</div>
-                    <div className="font-semibold text-sm text-right">{match.equipeB}</div>
+                    <div className="font-semibold text-sm text-[#0D0D0D]">{match.equipeA}</div>
+                    <div className="text-center text-gray-400 text-xs font-bold uppercase tracking-widest">VS</div>
+                    <div className="font-semibold text-sm text-right text-[#0D0D0D]">{match.equipeB}</div>
                   </div>
-                  <div className="text-xs text-gray-600 mb-3">
-                    Score actuel: {match.scoreA ?? '-'} - {match.scoreB ?? '-'}
+                  <div className="text-xs text-gray-500 mb-3">
+                    Score actuel: {match.scoreA ?? '—'} — {match.scoreB ?? '—'}
                   </div>
 
                   <button
                     onClick={() => handleSelectMatch(match)}
-                    className="w-full bg-lorraine-blue hover:bg-blue-700 text-white py-2 px-4 rounded-lg font-semibold transition-colors text-sm"
+                    className="w-full btn-primary text-sm py-2"
                   >
                     Saisir le score
                   </button>
                   <div className="grid grid-cols-2 gap-2 mt-2">
                     <button
                       onClick={() => handleSetMatchStatus(match.id, 'En cours')}
-                      className="bg-amber-500 hover:bg-amber-600 text-white py-2 px-3 rounded-lg font-semibold transition-colors text-xs"
+                      className="bg-[#FFEF3F] hover:bg-[#e6d400] text-[#0D0D0D] py-1.5 px-3 font-bold transition-colors text-xs uppercase tracking-wide"
                     >
                       Démarrer
                     </button>
                     <button
                       onClick={() => handleSetMatchStatus(match.id, 'Terminé')}
-                      className="bg-gray-700 hover:bg-gray-800 text-white py-2 px-3 rounded-lg font-semibold transition-colors text-xs"
+                      className="bg-[#0D0D0D] hover:bg-[#222] text-white py-1.5 px-3 font-bold transition-colors text-xs uppercase tracking-wide"
                     >
                       Clôturer
                     </button>
@@ -888,30 +829,30 @@ export default function DashboardBenevolePage() {
                   <button
                     type="submit"
                     disabled={incidentSubmitting}
-                    className="w-full bg-lorraine-red hover:bg-red-700 text-white py-2.5 rounded-lg font-semibold disabled:opacity-50"
+                    className="w-full bg-[#DC2626] hover:bg-red-700 text-white py-2.5 rounded-lg font-semibold disabled:opacity-50"
                   >
                     {incidentSubmitting ? 'Déclaration en cours...' : 'Déclarer l\'incident'}
                   </button>
                 </form>
               </div>
 
-              <div className="panel-raised rounded-lg p-6">
+              <div className="table-frame rounded-lg p-6">
                 <h3 className="font-bold text-gray-900 mb-4">Suivi des incidents</h3>
                 <div className="space-y-3 max-h-96 overflow-y-auto">
                   {incidents.length === 0 && <p className="text-sm text-gray-500">Aucun incident déclaré.</p>}
                   {incidents.map((incident) => (
-                    <div key={incident.id} className="section-split rounded-lg p-3">
+                    <div key={incident.id} className="section-split p-3">
                       <div className="flex items-center justify-between gap-2">
-                        <div className="font-semibold text-sm">{incident.gravite} {incident.typeUrgence}</div>
-                        <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">{incident.statut}</span>
+                        <div className="font-semibold text-sm text-[#0D0D0D]">{incident.gravite} {incident.typeUrgence}</div>
+                        <span className="text-[10px] bg-gray-100 text-gray-700 px-2 py-0.5 font-bold uppercase border border-gray-200">{incident.statut}</span>
                       </div>
                       <p className="text-sm text-gray-700 mt-1">{incident.lieu}</p>
-                      <p className="text-xs text-gray-600 mt-1">{incident.description}</p>
+                      <p className="text-xs text-gray-500 mt-1">{incident.description}</p>
                       {incident.statut !== 'Résolu' && incident.statut !== 'Clôturé' && (
-                        <div className="mt-3 grid grid-cols-3 gap-2">
-                          <button onClick={() => handleIncidentStatus(incident.id, 'En traitement')} className="bg-amber-500 hover:bg-amber-600 text-white text-xs py-1.5 rounded">En traitement</button>
-                          <button onClick={() => handleIncidentStatus(incident.id, 'Résolu')} className="bg-green-600 hover:bg-green-700 text-white text-xs py-1.5 rounded">Résolu</button>
-                          <button onClick={() => handleIncidentStatus(incident.id, 'Clôturé')} className="bg-gray-700 hover:bg-gray-800 text-white text-xs py-1.5 rounded">Clôturé</button>
+                        <div className="mt-3 flex gap-2 flex-wrap">
+                          <button onClick={() => handleIncidentStatus(incident.id, 'En traitement')} className="bg-[#FFEF3F] hover:bg-[#e6d400] text-[#0D0D0D] text-xs py-1 px-2 font-bold uppercase transition-colors">En traitement</button>
+                          <button onClick={() => handleIncidentStatus(incident.id, 'Résolu')} className="bg-[#0D0D0D] hover:bg-[#222] text-white text-xs py-1 px-2 font-bold uppercase transition-colors">Résolu</button>
+                          <button onClick={() => handleIncidentStatus(incident.id, 'Clôturé')} className="bg-gray-200 hover:bg-gray-300 text-gray-800 text-xs py-1 px-2 font-bold uppercase transition-colors">Clôturé</button>
                         </div>
                       )}
                     </div>
@@ -920,31 +861,31 @@ export default function DashboardBenevolePage() {
               </div>
             </div>
 
-            <div className="mt-6 bg-red-50 border-2 border-red-200 rounded-lg p-6">
-              <h3 className="font-bold text-red-900 mb-4 flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5" />
+            <div className="mt-4 bg-[#0D0D0D] border-l-4 border-[#DC2626] p-5">
+              <h3 className="font-black text-white mb-4 flex items-center gap-2 text-sm uppercase tracking-widest">
+                <AlertTriangle className="w-4 h-4 text-[#DC2626]" />
                 Numéros d'Urgence
               </h3>
-              <div className="grid md:grid-cols-3 gap-4">
-                <a href="tel:15" className="panel hover:bg-slate-100/80 rounded-lg p-4 flex items-center gap-3 transition-colors">
-                  <div className="text-2xl">🚑</div>
+              <div className="grid md:grid-cols-3 gap-3">
+                <a href="tel:15" className="bg-white/5 hover:bg-[#FFEF3F]/10 hover:border-[#FFEF3F] border border-white/10 p-4 flex items-center gap-3 transition-colors">
+                  <span className="text-2xl">🚑</span>
                   <div>
-                    <div className="font-bold">SAMU</div>
-                    <div className="text-red-600 font-bold">15</div>
+                    <div className="font-bold text-white">SAMU</div>
+                    <div className="text-[#DC2626] font-black text-lg">15</div>
                   </div>
                 </a>
-                <a href="tel:18" className="panel hover:bg-slate-100/80 rounded-lg p-4 flex items-center gap-3 transition-colors">
-                  <div className="text-2xl">🚒</div>
+                <a href="tel:18" className="bg-white/5 hover:bg-[#FFEF3F]/10 hover:border-[#FFEF3F] border border-white/10 p-4 flex items-center gap-3 transition-colors">
+                  <span className="text-2xl">🚒</span>
                   <div>
-                    <div className="font-bold">Pompiers</div>
-                    <div className="text-red-600 font-bold">18</div>
+                    <div className="font-bold text-white">Pompiers</div>
+                    <div className="text-[#DC2626] font-black text-lg">18</div>
                   </div>
                 </a>
-                <a href="tel:0612345678" className="panel hover:bg-slate-100/80 rounded-lg p-4 flex items-center gap-3 transition-colors">
-                  <div className="text-2xl">👨‍💼</div>
+                <a href="tel:0612345678" className="bg-white/5 hover:bg-[#FFEF3F]/10 hover:border-[#FFEF3F] border border-white/10 p-4 flex items-center gap-3 transition-colors">
+                  <span className="text-2xl">📞</span>
                   <div>
-                    <div className="font-bold">PC Organisation</div>
-                    <div className="text-red-600 font-bold">06 12 34 56 78</div>
+                    <div className="font-bold text-white">PC Organisation</div>
+                    <div className="text-[#DC2626] font-black text-sm">06 12 34 56 78</div>
                   </div>
                 </a>
               </div>
@@ -952,34 +893,76 @@ export default function DashboardBenevolePage() {
           </>
         )}
 
-        {benevoleUrgentTasks.length > 0 && (
-          <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-5 shadow-sm">
+        {activeSection === 'taches' && (
+          <div className="table-frame">
+            <div className="p-5 panel-deep border-b border-gray-100">
+              <h2 className="text-sm font-black uppercase tracking-widest text-[#0D0D0D] flex items-center gap-2">
+                <ClipboardList className="w-4 h-4" />
+                Mes Tâches
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">{benevoleTasks.length} tâche(s) assignée(s) à votre compte.</p>
+            </div>
+            <div className="divide-y divide-gray-100 max-h-[41.4rem] overflow-y-auto">
+              {benevoleTasks.length === 0 && (
+                <div className="p-8 text-center text-sm text-gray-400">Aucune tâche assignée pour le moment.</div>
+              )}
+              {benevoleTasks.map((task: any) => {
+                const priorite = String(task.priorite || '').toLowerCase();
+                const isUrgent = priorite.includes('urgent') || priorite.includes('critique') || priorite.includes('important');
+                const isDone = String(task.statut || '').toLowerCase().includes('termin');
+                return (
+                  <div key={task.id} className="p-4 hover:bg-gray-50 flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        {isUrgent && !isDone && (
+                          <span className="bg-[#FFEF3F] text-[#0D0D0D] px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest flex-shrink-0">Urgent</span>
+                        )}
+                        <span className={`font-semibold text-sm truncate ${isDone ? 'line-through text-gray-400' : 'text-[#0D0D0D]'}`}>
+                          {task.tache || task.titre}
+                        </span>
+                      </div>
+                      {task.deadline && <p className="text-xs text-gray-500">Deadline: {task.deadline}</p>}
+                      <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 border border-gray-200 font-bold uppercase mt-1 inline-block">{task.statut}</span>
+                    </div>
+                    <Link
+                      href={`/benevole/taches/${task.id}`}
+                      className="flex-shrink-0 flex items-center gap-1 text-xs font-bold text-[#0D0D0D] hover:text-[#FFEF3F] uppercase tracking-wide transition-colors"
+                    >
+                      Détails
+                      <ExternalLink className="w-3 h-3" />
+                    </Link>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {benevoleUrgentTasks.length > 0 && activeSection !== 'taches' && (
+          <div className="mb-4 border-l-4 border-[#FFEF3F] bg-[#FFEF3F]/10 p-4">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-lg font-bold text-amber-900">Tâches prioritaires</h2>
-                <p className="text-sm text-amber-800 mt-1">
+                <h2 className="text-sm font-black uppercase tracking-widest text-[#0D0D0D]">Tâches prioritaires</h2>
+                <p className="text-sm text-gray-700 mt-1">
                   {benevoleUrgentTasks.length} tâche(s) importante(s) vous sont associées.
                 </p>
               </div>
-              <div className="text-2xl font-bold text-amber-700">{benevoleUrgentTasks.length}</div>
+              <div className="text-2xl font-black text-[#0D0D0D]">{benevoleUrgentTasks.length}</div>
             </div>
           </div>
         )}
 
         {activeSection === 'devis' && (
           <div className="grid lg:grid-cols-2 gap-4">
-            <div className="panel-raised rounded-lg p-6">
-              <h3 className="font-bold text-gray-900 mb-2">Ajouter un devis</h3>
-              <p className="text-sm text-gray-600 mb-4">
-                Le devis sera relié à votre compte et visible dans le dashboard admin.
-              </p>
+            <div className="panel-raised p-5">
+              <h3 className="text-sm font-black uppercase tracking-widest text-[#0D0D0D] mb-4">Ajouter un devis</h3>
               <form onSubmit={handleCreateDevis} className="space-y-3">
                 <input
                   type="text"
                   value={newDevisTitre}
                   onChange={(e) => setNewDevisTitre(e.target.value)}
                   placeholder="Titre du devis"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  className="input"
                 />
                 <input
                   type="number"
@@ -987,26 +970,26 @@ export default function DashboardBenevolePage() {
                   step="0.01"
                   value={newDevisMontant}
                   onChange={(e) => setNewDevisMontant(e.target.value)}
-                  placeholder="Montant"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  placeholder="Montant (€)"
+                  className="input"
                 />
                 <textarea
                   value={newDevisNotes}
                   onChange={(e) => setNewDevisNotes(e.target.value)}
-                  placeholder="Notes"
+                  placeholder="Notes (optionnel)"
                   rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  className="input resize-none"
                 />
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Pièces jointes</label>
+                  <label className="label">Pièces jointes</label>
                   <input
                     type="file"
                     multiple
                     onChange={(e) => setNewDevisFiles(Array.from(e.target.files || []))}
-                    className="w-full text-sm"
+                    className="w-full text-sm text-gray-600"
                   />
                   {newDevisFiles.length > 0 && (
-                    <p className="text-xs text-gray-500 mt-2">
+                    <p className="text-xs text-gray-500 mt-1">
                       {newDevisFiles.length} fichier(s) sélectionné(s)
                     </p>
                   )}
@@ -1014,45 +997,42 @@ export default function DashboardBenevolePage() {
                 <button
                   type="submit"
                   disabled={devisSubmitting}
-                  className="w-full bg-slate-900 hover:bg-slate-800 text-white py-2.5 rounded-lg font-semibold disabled:opacity-50"
+                  className="w-full btn-primary disabled:opacity-50"
                 >
-                  {devisSubmitting ? 'Ajout en cours...' : 'Ajouter le devis'}
+                  {devisSubmitting ? 'Ajout en cours…' : 'Ajouter le devis'}
                 </button>
               </form>
-              <p className="text-xs text-gray-500 mt-3">
-                Les fichiers sont déposés sur le site puis enregistrés dans Airtable comme pièces jointes.
-              </p>
             </div>
 
-            <div className="panel-raised rounded-lg p-6">
-              <h3 className="font-bold text-gray-900 mb-2">Mes devis</h3>
-              <p className="text-sm text-gray-600 mb-4">
-                {devisLoading ? 'Chargement...' : `${benevoleDevis.length} devis lié(s) à votre compte.`}
+            <div className="table-frame p-5">
+              <h3 className="text-sm font-black uppercase tracking-widest text-[#0D0D0D] mb-1">Mes devis</h3>
+              <p className="text-xs text-gray-400 mb-4">
+                {devisLoading ? 'Chargement…' : `${benevoleDevis.length} devis lié(s) à votre compte.`}
               </p>
               <div className="space-y-3 max-h-[34rem] overflow-y-auto">
                 {benevoleDevis.length === 0 && !devisLoading && (
-                  <p className="text-sm text-gray-500">Aucun devis pour le moment.</p>
+                  <p className="text-sm text-gray-400">Aucun devis pour le moment.</p>
                 )}
                 {benevoleDevis.map((devis) => (
-                  <div key={devis.id} className="section-split rounded-lg p-4">
+                  <div key={devis.id} className="section-split p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <div className="font-semibold text-gray-900">{devis.titre}</div>
-                        <div className="text-sm text-gray-600">{devis.montant?.toLocaleString('fr-FR')}€</div>
+                        <div className="font-semibold text-[#0D0D0D]">{devis.titre}</div>
+                        <div className="text-sm text-gray-600 font-bold">{devis.montant?.toLocaleString('fr-FR')}€</div>
                       </div>
-                      <span className="text-xs bg-slate-100 text-slate-700 px-2 py-1 rounded-full">{devis.statut}</span>
+                      <span className="text-[10px] bg-gray-100 text-gray-700 px-2 py-0.5 font-bold uppercase border border-gray-200 flex-shrink-0">{devis.statut}</span>
                     </div>
-                    {devis.dateReception && <p className="text-xs text-gray-500 mt-2">Réception: {devis.dateReception}</p>}
-                    {devis.notes && <p className="text-sm text-gray-700 mt-2">{devis.notes}</p>}
+                    {devis.dateReception && <p className="text-xs text-gray-400 mt-1.5">Reçu le {devis.dateReception}</p>}
+                    {devis.notes && <p className="text-sm text-gray-600 mt-2">{devis.notes}</p>}
                     {Array.isArray(devis.piecesJointes) && devis.piecesJointes.length > 0 && (
-                      <div className="mt-3 space-y-2">
+                      <div className="mt-3 space-y-1">
                         {devis.piecesJointes.map((piece: any) => (
                           <a
                             key={piece.id}
                             href={piece.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="block text-sm text-lorraine-blue hover:underline"
+                            className="block text-xs text-[#0D0D0D] hover:text-[#FFEF3F] hover:underline font-semibold"
                           >
                             {piece.filename}
                           </a>
@@ -1070,37 +1050,35 @@ export default function DashboardBenevolePage() {
       {/* Modal saisie score */}
       {selectedMatch && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="panel-raised rounded-lg shadow-2xl max-w-md w-full p-6">
-            <h3 className="text-xl font-bold mb-4">
-              📊 Saisie Score - {selectedMatch.idMatch || selectedMatch.id}
+          <div className="panel-raised shadow-2xl max-w-md w-full p-6 border-t-4 border-[#FFEF3F]">
+            <h3 className="text-sm font-black uppercase tracking-widest text-[#0D0D0D] mb-5">
+              Saisie Score — {selectedMatch.idMatch || selectedMatch.id}
             </h3>
 
             <div className="space-y-6">
               {/* Équipe A */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {selectedMatch.equipeA}
-                </label>
-                <div className="flex items-center gap-4">
+                <label className="label">{selectedMatch.equipeA}</label>
+                <div className="flex items-center gap-4 mt-1">
                   <button
                     onClick={() => setScoreA(Math.max(0, scoreA - 1))}
-                    className="w-12 h-12 bg-gray-200 hover:bg-gray-300 rounded-lg font-bold text-xl"
+                    className="w-12 h-12 bg-gray-100 hover:bg-gray-200 font-black text-xl transition-colors border border-gray-200"
                   >
                     −
                   </button>
                   <div className="flex-1 text-center">
-                    <div className="text-5xl font-bold text-lorraine-blue">{scoreA}</div>
+                    <div className="text-6xl font-black text-[#0D0D0D]">{scoreA}</div>
                     <input
                       type="number"
                       min={0}
                       value={scoreA}
                       onChange={(e) => setScoreA(Math.max(0, Number(e.target.value) || 0))}
-                      className="mt-2 w-24 text-center px-2 py-1 border border-gray-300 rounded"
+                      className="mt-2 w-20 text-center input text-sm"
                     />
                   </div>
                   <button
                     onClick={() => setScoreA(scoreA + 1)}
-                    className="w-12 h-12 bg-lorraine-blue hover:bg-blue-700 text-white rounded-lg font-bold text-xl"
+                    className="w-12 h-12 bg-[#0D0D0D] hover:bg-[#222] text-[#FFEF3F] font-black text-xl transition-colors"
                   >
                     +
                   </button>
@@ -1109,48 +1087,45 @@ export default function DashboardBenevolePage() {
 
               {/* Équipe B */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {selectedMatch.equipeB}
-                </label>
-                <div className="flex items-center gap-4">
+                <label className="label">{selectedMatch.equipeB}</label>
+                <div className="flex items-center gap-4 mt-1">
                   <button
                     onClick={() => setScoreB(Math.max(0, scoreB - 1))}
-                    className="w-12 h-12 bg-gray-200 hover:bg-gray-300 rounded-lg font-bold text-xl"
+                    className="w-12 h-12 bg-gray-100 hover:bg-gray-200 font-black text-xl transition-colors border border-gray-200"
                   >
                     −
                   </button>
                   <div className="flex-1 text-center">
-                    <div className="text-5xl font-bold text-lorraine-blue">{scoreB}</div>
+                    <div className="text-6xl font-black text-[#0D0D0D]">{scoreB}</div>
                     <input
                       type="number"
                       min={0}
                       value={scoreB}
                       onChange={(e) => setScoreB(Math.max(0, Number(e.target.value) || 0))}
-                      className="mt-2 w-24 text-center px-2 py-1 border border-gray-300 rounded"
+                      className="mt-2 w-20 text-center input text-sm"
                     />
                   </div>
                   <button
                     onClick={() => setScoreB(scoreB + 1)}
-                    className="w-12 h-12 bg-lorraine-blue hover:bg-blue-700 text-white rounded-lg font-bold text-xl"
+                    className="w-12 h-12 bg-[#0D0D0D] hover:bg-[#222] text-[#FFEF3F] font-black text-xl transition-colors"
                   >
                     +
                   </button>
                 </div>
               </div>
 
-              {/* Boutons */}
-              <div className="flex gap-3">
+              <div className="flex gap-3 pt-2">
                 <button
                   onClick={() => setSelectedMatch(null)}
-                  className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-semibold"
+                  className="flex-1 btn-secondary py-3"
                 >
                   Annuler
                 </button>
                 <button
                   onClick={handleSaveScore}
-                  className="flex-1 bg-lorraine-red hover:bg-red-700 text-white py-3 rounded-lg font-semibold"
+                  className="flex-1 btn-primary py-3"
                 >
-                  💾 Enregistrer
+                  Enregistrer
                 </button>
               </div>
             </div>

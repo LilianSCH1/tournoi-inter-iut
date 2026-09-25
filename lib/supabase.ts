@@ -13,7 +13,5 @@ export const TABLES = {
   BUDGET: 'logi_budget',
   TACHES: 'todo_list',
   INCIDENTS: 'incidents_urgences',
-  OBJETS_PERDUS: 'objets_perdus_trouves',
-  VOTES_MVP: 'votes_mvp',
   DEVIS: 'devis_pieces_jointes',
 } as const;

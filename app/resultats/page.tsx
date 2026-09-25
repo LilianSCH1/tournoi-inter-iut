@@ -47,38 +47,40 @@ export default function ResultatsPage() {
     });
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-amber-50 via-white to-gray-50">
-      <div className="bg-lorraine-gold text-gray-900 py-6 shadow-sm">
+    <div className="min-h-screen bg-[#FAFAFA]">
+      <div className="bg-[#0D0D0D] border-b-[3px] border-[#FFEF3F] py-6 shadow-sm">
         <div className="container mx-auto px-4">
           <Link
             href="/"
-            className="inline-flex items-center gap-2 text-gray-700 hover:text-gray-900 mb-4"
+            className="inline-flex items-center gap-2 text-gray-500 hover:text-[#FFEF3F] mb-5 text-sm uppercase tracking-widest font-semibold transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            Retour à l'accueil
+            Retour
           </Link>
-          <h1 className="text-3xl font-bold">🏆 Résultats en direct</h1>
-          <p className="text-gray-700 mt-2">Synchronisé automatiquement avec Airtable.</p>
+          <h1 className="text-3xl font-black uppercase tracking-tight text-white">
+            Résultats en direct
+          </h1>
+          <p className="text-gray-500 mt-2 text-sm">Synchronisé automatiquement.</p>
         </div>
       </div>
 
       <div className="container mx-auto px-4 py-12 space-y-8">
         <div className="grid md:grid-cols-3 gap-4">
-          <div className="bg-white rounded-2xl shadow p-5 border border-gray-100">
+          <div className="bg-white shadow p-5 border border-gray-100">
             <div className="text-sm text-gray-500">Matchs en cours</div>
-            <div className="text-3xl font-bold text-red-600 mt-1">{matchsEnCours.length}</div>
+            <div className="text-3xl font-black text-[#DC2626] mt-1">{matchsEnCours.length}</div>
           </div>
-          <div className="bg-white rounded-2xl shadow p-5 border border-gray-100">
+          <div className="bg-white shadow p-5 border border-gray-100">
             <div className="text-sm text-gray-500">Matchs terminés</div>
-            <div className="text-3xl font-bold text-lorraine-blue mt-1">{matchsTermines.length}</div>
+            <div className="text-3xl font-black text-[#0D0D0D] mt-1">{matchsTermines.length}</div>
           </div>
-          <div className="bg-white rounded-2xl shadow p-5 border border-gray-100">
+          <div className="bg-white shadow p-5 border border-gray-100">
             <div className="text-sm text-gray-500">Total affiché</div>
             <div className="text-3xl font-bold text-gray-900 mt-1">{matchs.length}</div>
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl shadow p-6 border border-gray-100">
+        <div className="bg-white shadow p-6 border border-gray-100">
           <div className="flex items-center justify-between gap-4 mb-4">
             <h2 className="text-xl font-bold">🔴 Matchs en cours</h2>
             <span className="text-sm text-gray-500">Mise à jour automatique</span>
@@ -90,7 +92,7 @@ export default function ResultatsPage() {
           ) : (
             <div className="space-y-3">
               {matchsEnCours.map((match) => (
-                <div key={match.id} className="border border-red-200 bg-red-50 rounded-xl p-5">
+                <div key={match.id} className="border-l-4 border-[#DC2626] bg-red-50 p-5">
                   <div className="font-semibold">{match.idMatch} - {match.sport}</div>
                   <div className="text-sm text-gray-700 mt-1">{match.equipeA} vs {match.equipeB}</div>
                   <div className="text-xs text-gray-600 mt-1">{formatDate(match.date)} • {match.heureDebut}</div>
@@ -100,7 +102,7 @@ export default function ResultatsPage() {
           )}
         </div>
 
-        <div className="bg-white rounded-2xl shadow p-6 border border-gray-100">
+        <div className="bg-white shadow p-6 border border-gray-100">
           <h2 className="text-xl font-bold mb-4">✅ Matchs terminés ({matchsTermines.length})</h2>
           {matchsTermines.length === 0 ? (
             <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-6 text-gray-600">

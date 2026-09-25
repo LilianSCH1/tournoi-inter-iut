@@ -2,6 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { ArrowLeft, CheckCircle } from 'lucide-react';
+
+const STATUTS = ['À faire', 'En cours', 'Terminé', 'En attente'] as const;
 
 export default function TacheDetailPage() {
   const params = useParams<{ id: string }>();
@@ -12,7 +15,9 @@ export default function TacheDetailPage() {
   const [saving, setSaving] = useState(false);
   const [newStatut, setNewStatut] = useState('');
   const [notes, setNotes] = useState('');
-  const [uiMessage, setUiMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [uiMessage, setUiMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(
+    null
+  );
 
   useEffect(() => {
     const fetchTask = async () => {
@@ -24,7 +29,7 @@ export default function TacheDetailPage() {
         setTask(json);
         setNewStatut(json.statut || '');
         setNotes(json.notes || '');
-      } catch (error) {
+      } catch {
         setTask(null);
       } finally {
         setLoading(false);
@@ -49,7 +54,6 @@ export default function TacheDetailPage() {
       });
       if (!res.ok) throw new Error('Mise à jour impossible');
       showUiMessage('success', 'Statut mis à jour.');
-      // refresh
       const refreshed = await fetch(`/api/taches/${id}`, { cache: 'no-store' });
       if (refreshed.ok) setTask(await refreshed.json());
     } catch (error) {
@@ -59,53 +63,166 @@ export default function TacheDetailPage() {
     }
   };
 
-  if (loading) return <div className="p-6">Chargement...</div>;
-  if (!task) return <div className="p-6">Tâche introuvable.</div>;
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0D0D0D] flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#FFEF3F] mx-auto mb-4" />
+          <p className="text-gray-500 text-sm uppercase tracking-widest">Chargement…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!task) {
+    return (
+      <div className="min-h-screen bg-[#FAFAFA] flex items-center justify-center p-6">
+        <div className="text-center">
+          <p className="text-gray-400 text-sm">Tâche introuvable.</p>
+          <button
+            onClick={() => router.back()}
+            className="mt-4 btn-secondary text-sm py-2"
+          >
+            Retour
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const prioriteLabel = String(task.priorite || '').toLowerCase();
+  const isUrgent =
+    prioriteLabel.includes('urgent') ||
+    prioriteLabel.includes('critique') ||
+    prioriteLabel.includes('important');
 
   return (
-    <div className="min-h-screen p-6">
-      <div className="max-w-3xl mx-auto panel-raised rounded-lg p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-xl font-bold">Détail tâche</h1>
-          <button onClick={() => router.back()} className="text-sm text-gray-600">Retour</button>
-        </div>
+    <div className="min-h-screen bg-[#FAFAFA]">
 
+      {/* Header */}
+      <div className="bg-[#0D0D0D] border-b-[3px] border-[#FFEF3F]">
+        <div className="max-w-3xl mx-auto px-4 py-5">
+          <button
+            onClick={() => router.back()}
+            className="inline-flex items-center gap-2 text-gray-500 hover:text-[#FFEF3F] text-sm transition-colors uppercase tracking-widest font-semibold"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Retour
+          </button>
+        </div>
+      </div>
+
+      <div className="max-w-3xl mx-auto px-4 py-8">
+
+        {/* UI feedback */}
         {uiMessage && (
-          <div className={`mb-4 rounded-lg px-4 py-3 text-sm font-semibold ${uiMessage.type === 'success' ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-red-100 text-red-800 border border-red-200'}`}>
+          <div
+            className={`mb-6 border-l-4 px-4 py-3 text-sm font-semibold ${
+              uiMessage.type === 'success'
+                ? 'border-green-500 bg-green-50 text-green-800'
+                : 'border-[#DC2626] bg-red-50 text-red-700'
+            }`}
+          >
             {uiMessage.text}
           </div>
         )}
 
-        <div className="space-y-3">
-          <div>
-            <div className="font-semibold text-lg">{task.tache}</div>
-            {task.description && <div className="text-sm text-gray-600 mt-1">{task.description}</div>}
-            {task.deadline && <div className="text-xs text-gray-500 mt-1">Deadline: {task.deadline}</div>}
+        {/* Task info */}
+        <div className="bg-white border border-gray-200 p-6 md:p-8 mb-5">
+          <div className="flex items-start justify-between gap-4 mb-4">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.25em] text-gray-400 font-bold mb-2">
+                Détail tâche
+              </p>
+              <h1 className="text-2xl font-black text-[#0D0D0D] leading-tight">{task.tache}</h1>
+            </div>
+            {isUrgent && (
+              <span className="flex-shrink-0 bg-[#FFEF3F] text-[#0D0D0D] text-[10px] font-black uppercase tracking-widest px-3 py-1.5">
+                Urgent
+              </span>
+            )}
           </div>
 
+          {task.description && (
+            <p className="text-sm text-gray-600 leading-relaxed mb-4">{task.description}</p>
+          )}
+
+          <div className="flex flex-wrap gap-4 text-sm">
+            {task.deadline && (
+              <div className="border border-gray-200 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">
+                  Deadline
+                </p>
+                <p className="font-semibold text-[#0D0D0D] mt-0.5">{task.deadline}</p>
+              </div>
+            )}
+            {task.priorite && (
+              <div className="border border-gray-200 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">
+                  Priorité
+                </p>
+                <p className="font-semibold text-[#0D0D0D] mt-0.5">{task.priorite}</p>
+              </div>
+            )}
+            {task.statut && (
+              <div className="border border-gray-200 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">
+                  Statut actuel
+                </p>
+                <p className="font-semibold text-[#0D0D0D] mt-0.5">{task.statut}</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Update form */}
+        <div className="bg-white border border-gray-200 p-6 md:p-8 space-y-5">
+          <h2 className="text-sm font-black uppercase tracking-widest text-[#0D0D0D] border-b border-gray-100 pb-3">
+            Mettre à jour
+          </h2>
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Statut</label>
-            <select value={newStatut} onChange={(e) => setNewStatut(e.target.value)} className="w-full px-3 py-2 border rounded">
-              <option value="">-- Choisir --</option>
-              <option value="À faire">À faire</option>
-              <option value="En cours">En cours</option>
-              <option value="Terminé">Terminé</option>
-              <option value="En attente">En attente</option>
+            <label className="label">Nouveau statut</label>
+            <select
+              value={newStatut}
+              onChange={(e) => setNewStatut(e.target.value)}
+              className="input"
+            >
+              <option value="">— Choisir —</option>
+              {STATUTS.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
             </select>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Notes (optionnel)</label>
-            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} className="w-full px-3 py-2 border rounded" />
+            <label className="label">Notes (optionnel)</label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={4}
+              placeholder="Ajouter des précisions, observations…"
+              className="input resize-none"
+            />
           </div>
 
-          <div className="flex gap-3">
-            <button onClick={handleSave} disabled={saving} className="bg-amber-700 hover:bg-amber-800 text-white px-4 py-2 rounded">
-              {saving ? 'Enregistrement...' : 'Enregistrer'}
+          <div className="flex gap-3 pt-2">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="btn-primary gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <CheckCircle className="w-4 h-4" />
+              {saving ? 'Enregistrement…' : 'Enregistrer'}
             </button>
-            <button onClick={() => router.back()} className="bg-gray-200 px-4 py-2 rounded">Fermer</button>
+            <button onClick={() => router.back()} className="btn-secondary">
+              Fermer
+            </button>
           </div>
         </div>
+
       </div>
     </div>
   );

@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server';
 import { getAllEquipes } from '@/lib/data/equipes';
 import { getAllParticipants } from '@/lib/data/participants';
+import { requireRole } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export async function GET() {
+  const auth = await requireRole(['admin']);
+  if (auth.error) return auth.error;
+
   try {
     const [equipes, participants] = await Promise.all([
       getAllEquipes(),

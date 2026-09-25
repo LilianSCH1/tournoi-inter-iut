@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server';
-import { createEquipe, getAllEquipes } from '@/lib/data/equipes';
+import { createEquipe, getAllEquipes, updateEquipePoule, updateEquipeValidation, type StatutValidation } from '@/lib/data/equipes';
 import { getAllParticipants, updateParticipantEquipe, updateParticipantType } from '@/lib/data/participants';
+import { requireRole } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export async function GET() {
+  const auth = await requireRole(['admin']);
+  if (auth.error) return auth.error;
+
   try {
     const equipes = await getAllEquipes();
     return NextResponse.json(equipes, {
@@ -63,6 +67,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Tous les joueurs doivent être des spectateurs non affectés à une équipe' }, { status: 400 });
     }
 
+    const normalizedIut = String(iut).trim().toLowerCase();
+    const wrongIut = selected.find((participant) => participant.iut.trim().toLowerCase() !== normalizedIut);
+    if (wrongIut) {
+      return NextResponse.json(
+        { error: `${wrongIut.nomComplet} n'est pas inscrit comme spectateur de l'IUT ${iut}` },
+        { status: 400 }
+      );
+    }
+
     const created = await createEquipe({
       nom: String(nomEquipe),
       iut: String(iut),
@@ -110,6 +123,50 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, equipe: created });
   } catch (error) {
     console.error('Erreur création équipe:', error);
+    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+  }
+}
+
+const VALID_STATUTS_VALIDATION: StatutValidation[] = ['En attente', 'Validée', 'Refusée'];
+
+export async function PATCH(request: Request) {
+  const auth = await requireRole(['admin']);
+  if (auth.error) return auth.error;
+
+  try {
+    const body = await request.json();
+    const { equipeId, pouleAssignee, statutValidation, documentsValides, motifRefus } = body as {
+      equipeId?: string;
+      pouleAssignee?: string;
+      statutValidation?: string;
+      documentsValides?: boolean;
+      motifRefus?: string;
+    };
+
+    if (!equipeId) {
+      return NextResponse.json({ error: 'equipeId requis' }, { status: 400 });
+    }
+
+    if (pouleAssignee !== undefined) {
+      const ok = await updateEquipePoule(equipeId, String(pouleAssignee));
+      if (!ok) return NextResponse.json({ error: 'Affectation de poule impossible' }, { status: 500 });
+    }
+
+    if (statutValidation !== undefined) {
+      if (!VALID_STATUTS_VALIDATION.includes(statutValidation as StatutValidation)) {
+        return NextResponse.json({ error: 'statutValidation invalide' }, { status: 400 });
+      }
+      const ok = await updateEquipeValidation(equipeId, {
+        statutValidation: statutValidation as StatutValidation,
+        documentsValides,
+        motifRefus,
+      });
+      if (!ok) return NextResponse.json({ error: 'Mise à jour de la candidature impossible' }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Erreur PATCH équipe:', error);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
   }
 }

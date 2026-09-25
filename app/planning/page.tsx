@@ -68,39 +68,39 @@ export default function PlanningPage() {
     });
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 via-white to-gray-50">
-      <div className="bg-lorraine-blue text-white py-6 shadow-sm">
+    <div className="min-h-screen bg-[#FAFAFA]">
+      <div className="bg-[#0D0D0D] border-b-[3px] border-[#FFEF3F] py-6 shadow-sm">
         <div className="container mx-auto px-4">
-          <Link href="/" className="inline-flex items-center gap-2 text-blue-200 hover:text-white mb-4">
+          <Link href="/" className="inline-flex items-center gap-2 text-gray-500 hover:text-[#FFEF3F] mb-5 text-sm uppercase tracking-widest font-semibold transition-colors">
             <ArrowLeft className="w-4 h-4" />
             Retour
           </Link>
-          <h1 className="text-3xl font-bold flex items-center gap-3">
-            <Calendar className="w-8 h-8" />
-            Planning des Matchs
+          <h1 className="text-3xl font-black uppercase tracking-tight text-white flex items-center gap-3">
+            <Calendar className="w-7 h-7 text-[#FFEF3F]" />
+            Planning des matchs
           </h1>
-          <p className="text-blue-200 mt-2">{totalMatchs} matchs</p>
+          <p className="text-gray-500 mt-2 text-sm">{totalMatchs} matchs programmés</p>
         </div>
       </div>
 
       <div className="container mx-auto px-4 py-8">
         {loading ? (
-          <div className="bg-white rounded-2xl shadow p-8 text-center border border-gray-100">
+          <div className="bg-white shadow p-8 text-center border border-gray-100">
             <p className="text-gray-600">Chargement du planning...</p>
           </div>
         ) : dates.length === 0 ? (
-          <div className="bg-white rounded-2xl shadow p-8 text-center border border-gray-100">
+          <div className="bg-white shadow p-8 text-center border border-gray-100">
             <p className="text-gray-600">Aucun match programmé pour le moment.</p>
           </div>
         ) : (
           <div className="space-y-8">
             {dates.map((date) => (
-              <div key={date} className="bg-white rounded-2xl shadow overflow-hidden border border-gray-100">
-                <div className="bg-lorraine-blue text-white px-6 py-4">
-                  <h2 className="text-2xl font-bold">
+              <div key={date} className="bg-white shadow overflow-hidden border border-gray-100">
+                <div className="bg-[#0D0D0D] text-white px-6 py-4 border-l-4 border-[#FFEF3F]">
+                  <h2 className="text-xl font-black uppercase tracking-wide">
                     {formatDate(date)}
                   </h2>
-                  <p className="text-blue-200">{matchsByDate[date].length} matchs</p>
+                  <p className="text-gray-500 text-sm mt-1">{matchsByDate[date].length} matchs</p>
                 </div>
                 <div className="divide-y">
                   {matchsByDate[date].map((match) => (
@@ -124,9 +124,9 @@ export default function PlanningPage() {
                             <div className="text-center">
                               {match.statut === 'Terminé' && match.scoreA !== undefined ? (
                                 <div className="inline-flex gap-3 bg-gray-100 rounded px-6 py-2">
-                                  <span className="text-2xl font-bold text-lorraine-blue">{match.scoreA}</span>
+                                  <span className="text-2xl font-black text-[#0D0D0D]">{match.scoreA}</span>
                                   <span>-</span>
-                                  <span className="text-2xl font-bold text-lorraine-blue">{match.scoreB}</span>
+                                  <span className="text-2xl font-black text-[#0D0D0D]">{match.scoreB}</span>
                                 </div>
                               ) : match.statut === 'En cours' ? (
                                 <span className="bg-red-100 text-red-700 px-4 py-1 rounded">🔴 EN DIRECT</span>
@@ -138,7 +138,7 @@ export default function PlanningPage() {
                           </div>
                         </div>
                         <div className="ml-6 text-right">
-                          <div className="text-2xl font-bold text-lorraine-blue">{match.heureDebut}</div>
+                          <div className="text-2xl font-black text-[#0D0D0D]">{match.heureDebut}</div>
                           <div className="text-sm text-gray-600">
                             {match.statut === 'Terminé' ? 'Terminé' : match.statut === 'En cours' ? 'En cours' : 'Programmé'}
                           </div>

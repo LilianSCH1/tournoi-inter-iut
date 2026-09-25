@@ -154,6 +154,23 @@ export async function updateParticipantType(id: string, type: ParticipantData['t
   return true;
 }
 
+// Génère et persiste un mot de passe bénévole si le participant n'en a pas
+// encore (ex: promotion d'un Spectateur déjà existant en Bénévole, où aucun
+// mot de passe n'a été créé à l'inscription initiale).
+export async function ensureBenevolePassword(id: string): Promise<string | null> {
+  const participant = await getParticipantById(id);
+  if (!participant) return null;
+  if (participant.benevolePassword) return participant.benevolePassword;
+
+  const password = generateBenevolePassword();
+  const { error } = await supabase
+    .from('liste_participants')
+    .update({ [BENEVOLE_PASSWORD_FIELD]: password })
+    .eq('id', id);
+  if (error) { console.error('Erreur génération mot de passe bénévole:', error); return null; }
+  return password;
+}
+
 export async function createParticipant(input: {
   nomComplet: string;
   email: string;

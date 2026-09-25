@@ -89,6 +89,72 @@ export async function getMatchsByDate(date: string): Promise<MatchData[]> {
   return (data || []).map(mapRowToMatch);
 }
 
+export interface MatchCreateInput {
+  idMatch?: string;
+  sport: string;
+  phase: string;
+  date: string;
+  heureDebut: string;
+  terrain: string;
+  equipeA?: string;
+  equipeB?: string;
+}
+
+export async function createMatch(input: MatchCreateInput): Promise<MatchData | null> {
+  const { data, error } = await supabase
+    .from('orga_matchs')
+    .insert({
+      id_match: input.idMatch?.trim() || null,
+      sport: input.sport,
+      phase: input.phase,
+      date: input.date,
+      heure_debut: input.heureDebut,
+      terrain: input.terrain,
+      equipe_a: input.equipeA || 'À définir',
+      equipe_b: input.equipeB || 'À définir',
+      statut: 'Programmé',
+    })
+    .select()
+    .single();
+
+  if (error || !data) { console.error('Erreur création match:', error); return null; }
+  return mapRowToMatch(data);
+}
+
+export async function updateMatchDetails(
+  matchId: string,
+  fields: Partial<{
+    sport: string;
+    phase: string;
+    date: string;
+    heureDebut: string;
+    terrain: string;
+    equipeA: string;
+    equipeB: string;
+  }>
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const rowId = await resolveMatchRowId(matchId);
+    if (!rowId) return { success: false, error: `Match introuvable (${matchId})` };
+
+    const payload: Record<string, unknown> = {};
+    if (fields.sport !== undefined) payload.sport = fields.sport;
+    if (fields.phase !== undefined) payload.phase = fields.phase;
+    if (fields.date !== undefined) payload.date = fields.date;
+    if (fields.heureDebut !== undefined) payload.heure_debut = fields.heureDebut;
+    if (fields.terrain !== undefined) payload.terrain = fields.terrain;
+    if (fields.equipeA !== undefined) payload.equipe_a = fields.equipeA;
+    if (fields.equipeB !== undefined) payload.equipe_b = fields.equipeB;
+
+    const { error } = await supabase.from('orga_matchs').update(payload).eq('id', rowId);
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Mise à jour impossible';
+    return { success: false, error: message };
+  }
+}
+
 export async function updateMatchScore(
   matchId: string,
   scoreA?: number,

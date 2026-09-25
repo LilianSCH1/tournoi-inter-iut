@@ -57,6 +57,34 @@ export async function getTachesEnRetardOuImportantesForResponsable(responsable: 
   });
 }
 
+export interface TacheCreateInput {
+  tache: string;
+  description?: string;
+  responsable: string;
+  priorite: string;
+  deadline?: string;
+  categorie: string;
+}
+
+export async function createTache(input: TacheCreateInput): Promise<TacheData | null> {
+  const { data, error } = await supabase
+    .from('todo_list')
+    .insert({
+      tache: input.tache,
+      description: input.description || '',
+      responsable: input.responsable,
+      statut: 'À faire',
+      priorite: input.priorite,
+      deadline: input.deadline || null,
+      categorie: input.categorie,
+    })
+    .select()
+    .single();
+
+  if (error || !data) { console.error('Erreur création tâche:', error); return null; }
+  return mapRowToTache(data);
+}
+
 export async function getTacheById(id: string): Promise<TacheData | null> {
   const { data, error } = await supabase.from('todo_list').select('*').eq('id', id).single();
   if (error || !data) return null;

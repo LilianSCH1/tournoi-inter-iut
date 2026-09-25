@@ -1,16 +1,44 @@
 import { NextResponse } from 'next/server';
-import { createParticipant, getAllParticipants, getParticipantByEmail, getParticipantById, updateParticipantArrivalStatus, updateParticipantCheckin, updateParticipantEquipe, updateParticipantType } from '@/lib/data/participants';
+import { createParticipant, ensureBenevolePassword, getAllParticipants, getParticipantByEmail, updateParticipantArrivalStatus, updateParticipantCheckin, updateParticipantEquipe, updateParticipantType } from '@/lib/data/participants';
+import { getSession, requireRole } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+// Accès à trois niveaux :
+// - anonyme (parcours d'inscription public) : uniquement les spectateurs,
+//   avec les seuls champs nécessaires à la sélection de joueurs par un capitaine.
+// - joueur : uniquement les participants de son propre IUT (pas les autres équipes).
+// - admin / bénévole : accès complet (nécessaire à l'opérationnel terrain).
 export async function GET() {
   try {
-    const participants = await getAllParticipants();
-    return NextResponse.json(participants, {
-      headers: {
-        'Cache-Control': 'no-store, max-age=0',
-      },
+    const session = await getSession();
+    const allParticipants = await getAllParticipants();
+
+    if (!session) {
+      const publicView = allParticipants
+        .filter((p) => p.type === 'Spectateur')
+        .map((p) => ({
+          id: p.id,
+          nomComplet: p.nomComplet,
+          email: p.email,
+          iut: p.iut,
+          type: p.type,
+          equipeIds: p.equipeIds,
+        }));
+      return NextResponse.json(publicView, { headers: { 'Cache-Control': 'no-store, max-age=0' } });
+    }
+
+    if (session.role === 'joueur') {
+      const iut = String(session.iut || '').trim().toLowerCase();
+      const scoped = iut
+        ? allParticipants.filter((p) => String(p.iut || '').trim().toLowerCase() === iut)
+        : [];
+      return NextResponse.json(scoped, { headers: { 'Cache-Control': 'no-store, max-age=0' } });
+    }
+
+    return NextResponse.json(allParticipants, {
+      headers: { 'Cache-Control': 'no-store, max-age=0' },
     });
   } catch (error) {
     console.error('Erreur API participants:', error);
@@ -19,6 +47,9 @@ export async function GET() {
 }
 
 export async function PATCH(request: Request) {
+  const auth = await requireRole(['admin', 'benevole']);
+  if (auth.error) return auth.error;
+
   try {
     const body = await request.json();
     const { participantId, arrived, status, type, equipeId } = body;
@@ -44,11 +75,8 @@ export async function PATCH(request: Request) {
     }
 
     if (type === 'Bénévole') {
-      const participant = await getParticipantById(participantId);
-      return NextResponse.json({
-        success: true,
-        benevolePassword: participant?.benevolePassword || null,
-      });
+      const benevolePassword = await ensureBenevolePassword(participantId);
+      return NextResponse.json({ success: true, benevolePassword });
     }
 
     return NextResponse.json({ success: true });
